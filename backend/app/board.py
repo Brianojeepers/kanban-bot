@@ -1,0 +1,119 @@
+import os
+import sqlite3
+from pathlib import Path
+from uuid import uuid4
+
+
+DEFAULT_COLUMNS = ["Backlog", "Discovery", "In Progress", "Review", "Done"]
+DEFAULT_CARDS = [
+    ("card-1", "col-backlog", "Align roadmap themes", "Draft quarterly themes with impact statements and metrics."),
+    ("card-2", "col-backlog", "Gather customer signals", "Review support tags, sales notes, and churn feedback."),
+    ("card-3", "col-discovery", "Prototype analytics view", "Sketch initial dashboard layout and key drill-downs."),
+    ("card-4", "col-in-progress", "Refine status language", "Standardize column labels and tone across the board."),
+    ("card-5", "col-in-progress", "Design card layout", "Add hierarchy and spacing for scanning dense lists."),
+    ("card-6", "col-review", "QA micro-interactions", "Verify hover, focus, and loading states."),
+    ("card-7", "col-done", "Ship marketing page", "Final copy approved and asset pack delivered."),
+    ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally."),
+]
+
+
+def connection() -> sqlite3.Connection:
+    database_path = Path(os.environ.get("DATABASE_PATH", "/data/pm.db"))
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    database = sqlite3.connect(database_path)
+    database.row_factory = sqlite3.Row
+    database.execute("PRAGMA foreign_keys = ON")
+    return database
+
+
+def initialize() -> None:
+    with connection() as database:
+        database.executescript("""
+            CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL);
+            CREATE TABLE IF NOT EXISTS boards (id INTEGER PRIMARY KEY, user_id INTEGER UNIQUE NOT NULL REFERENCES users(id));
+            CREATE TABLE IF NOT EXISTS columns (id TEXT PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id), title TEXT NOT NULL, position INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY, column_id TEXT NOT NULL REFERENCES columns(id), title TEXT NOT NULL, details TEXT NOT NULL, position INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, board_id INTEGER NOT NULL REFERENCES boards(id), role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        """)
+        database.execute("INSERT OR IGNORE INTO users (username) VALUES ('user')")
+        user_id = database.execute("SELECT id FROM users WHERE username = 'user'").fetchone()["id"]
+        database.execute("INSERT OR IGNORE INTO boards (user_id) VALUES (?)", (user_id,))
+        board_id = database.execute("SELECT id FROM boards WHERE user_id = ?", (user_id,)).fetchone()["id"]
+        if not database.execute("SELECT 1 FROM columns WHERE board_id = ?", (board_id,)).fetchone():
+            database.executemany(
+                "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+                [(f"col-{title.lower().replace(' ', '-')}", board_id, title, position) for position, title in enumerate(DEFAULT_COLUMNS)],
+            )
+        database.executemany(
+            "INSERT OR IGNORE INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
+            [(card_id, column_id, title, details, position) for position, (card_id, column_id, title, details) in enumerate(DEFAULT_CARDS)],
+        )
+
+
+def board() -> dict:
+    initialize()
+    with connection() as database:
+        board_id = database.execute("SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = 'user'").fetchone()["id"]
+        columns = [dict(row) for row in database.execute("SELECT id, title FROM columns WHERE board_id = ? ORDER BY position", (board_id,))]
+        cards = {row["id"]: {"id": row["id"], "title": row["title"], "details": row["details"]} for row in database.execute("SELECT cards.* FROM cards JOIN columns ON columns.id = cards.column_id WHERE columns.board_id = ? ORDER BY cards.position", (board_id,))}
+        for column in columns:
+            column["cardIds"] = [row["id"] for row in database.execute("SELECT id FROM cards WHERE column_id = ? ORDER BY position", (column["id"],))]
+        return {"columns": columns, "cards": cards}
+
+
+def rename_column(column_id: str, title: str) -> dict:
+    with connection() as database:
+        database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
+    return board()
+
+
+def create_card(column_id: str, title: str, details: str) -> dict:
+    card_id = f"card-{uuid4().hex}"
+    with connection() as database:
+        position = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
+        database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, title, details or "No details yet.", position))
+    return board()
+
+
+def update_card(card_id: str, title: str, details: str) -> dict:
+    with connection() as database:
+        database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id))
+    return board()
+
+
+def delete_card(card_id: str) -> dict:
+    with connection() as database:
+        database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    return board()
+
+
+def move_card(card_id: str, column_id: str, position: int) -> dict:
+    with connection() as database:
+        card = database.execute("SELECT column_id, title, details, position FROM cards WHERE id = ?", (card_id,)).fetchone()
+        if not card:
+            raise ValueError("Card does not exist")
+        if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
+            raise ValueError("Column does not exist")
+
+        source_column_id = card["column_id"]
+        database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (source_column_id, card["position"]))
+        database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+        destination_count = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
+        destination_position = max(0, min(position, destination_count))
+        database.execute("UPDATE cards SET position = position + 1 WHERE column_id = ? AND position >= ?", (column_id, destination_position))
+        database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, card["title"], card["details"], destination_position))
+    return board()
+
+
+def messages() -> list[dict[str, str]]:
+    initialize()
+    with connection() as database:
+        rows = database.execute("SELECT role, content FROM messages ORDER BY created_at, id").fetchall()
+    return [dict(row) for row in rows]
+
+
+def add_message(role: str, content: str) -> None:
+    initialize()
+    with connection() as database:
+        board_id = database.execute("SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = 'user'").fetchone()["id"]
+        database.execute("INSERT INTO messages (board_id, role, content) VALUES (?, ?, ?)", (board_id, role, content))

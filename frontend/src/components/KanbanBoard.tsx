@@ -1,23 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
-  closestCorners,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { initialData, type BoardData } from "@/lib/kanban";
+import { addCard, deleteCard, getBoard, moveBoardCard, renameColumn, updateCard } from "@/lib/api";
 
-export const KanbanBoard = () => {
+type KanbanBoardProps = { onLogout?: () => void };
+
+export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getBoard().then(setBoard).catch(() => setError("Unable to load board."));
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -27,66 +37,60 @@ export const KanbanBoard = () => {
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
 
+  // Precise pointer hit-testing first (falls back to rect overlap), matching
+  // dnd-kit's recommended strategy for nested column/card droppables.
+  const collisionDetection: CollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
-      return;
+    if (!over || active.id === over.id) return;
+
+    const activeId = active.id as string;
+    const overId = String(over.id);
+    const sourceColumn = board.columns.find((column) => column.cardIds.includes(activeId));
+    if (!sourceColumn) return;
+
+    const isOverColumn = board.columns.some((column) => column.id === overId);
+    const targetColumn = isOverColumn
+      ? board.columns.find((column) => column.id === overId)
+      : board.columns.find((column) => column.cardIds.includes(overId));
+    if (!targetColumn) return;
+
+    const remainingCardIds = targetColumn.cardIds.filter((cardId) => cardId !== activeId);
+    const position = isOverColumn ? remainingCardIds.length : remainingCardIds.indexOf(overId);
+
+    if (targetColumn.id === sourceColumn.id && sourceColumn.cardIds.indexOf(activeId) === position) return;
+
+    try {
+      setBoard(await moveBoardCard(activeId, targetColumn.id, position === -1 ? remainingCardIds.length : position));
+    } catch {
+      setError("Unable to move card.");
     }
-
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
   };
 
-  const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
-      ...prev,
-      columns: prev.columns.map((column) =>
-        column.id === columnId ? { ...column, title } : column
-      ),
-    }));
+  const handleRenameColumn = async (columnId: string, title: string) => {
+    try { setBoard(await renameColumn(columnId, title)); } catch { setError("Unable to rename column."); }
   };
 
-  const handleAddCard = (columnId: string, title: string, details: string) => {
-    const id = createId("card");
-    setBoard((prev) => ({
-      ...prev,
-      cards: {
-        ...prev.cards,
-        [id]: { id, title, details: details || "No details yet." },
-      },
-      columns: prev.columns.map((column) =>
-        column.id === columnId
-          ? { ...column, cardIds: [...column.cardIds, id] }
-          : column
-      ),
-    }));
+  const handleAddCard = async (columnId: string, title: string, details: string) => {
+    try { setBoard(await addCard(columnId, title, details)); } catch { setError("Unable to add card."); }
   };
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
-    });
+  const handleDeleteCard = async (_columnId: string, cardId: string) => {
+    try { setBoard(await deleteCard(cardId)); } catch { setError("Unable to delete card."); }
+  };
+
+  const handleEditCard = async (cardId: string, title: string, details: string) => {
+    try { setBoard(await updateCard(cardId, title, details)); } catch { setError("Unable to edit card."); }
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
@@ -111,6 +115,7 @@ export const KanbanBoard = () => {
                 and capture quick notes without getting buried in settings.
               </p>
             </div>
+            {onLogout && <button type="button" onClick={onLogout} className="text-sm text-[var(--primary-blue)]">Log out</button>}
             <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
                 Focus
@@ -132,10 +137,11 @@ export const KanbanBoard = () => {
             ))}
           </div>
         </header>
+        {error && <p role="alert">{error}</p>}
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
@@ -148,6 +154,7 @@ export const KanbanBoard = () => {
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
+                onEditCard={handleEditCard}
               />
             ))}
           </section>

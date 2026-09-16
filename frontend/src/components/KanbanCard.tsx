@@ -1,14 +1,17 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
+import { useState } from "react";
 import type { Card } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
+  onEdit: (cardId: string, title: string, details: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
+export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
+  const [isEditing, setIsEditing] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -31,14 +34,19 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
       data-testid={`card-${card.id}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
+        <div className="min-w-0 flex-1">
+          {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
             {card.title}
           </h4>
           <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
             {card.details}
-          </p>
+          </p></>}
         </div>
+        {!isEditing && <button
+          type="button"
+          onClick={() => setIsEditing(true)}
+          className="text-xs font-semibold text-[var(--primary-blue)]"
+        >Edit</button>}
         <button
           type="button"
           onClick={() => onDelete(card.id)}

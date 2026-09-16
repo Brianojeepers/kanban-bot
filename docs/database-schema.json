@@ -1,0 +1,17 @@
+{
+  "database": "SQLite at /data/pm.db",
+  "tables": {
+    "users": {"columns": ["id INTEGER PRIMARY KEY", "username TEXT UNIQUE NOT NULL"]},
+    "boards": {"columns": ["id INTEGER PRIMARY KEY", "user_id INTEGER UNIQUE NOT NULL REFERENCES users(id)"]},
+    "columns": {"columns": ["id TEXT PRIMARY KEY", "board_id INTEGER NOT NULL REFERENCES boards(id)", "title TEXT NOT NULL", "position INTEGER NOT NULL"]},
+    "cards": {"columns": ["id TEXT PRIMARY KEY", "column_id TEXT NOT NULL REFERENCES columns(id)", "title TEXT NOT NULL", "details TEXT NOT NULL", "position INTEGER NOT NULL"]},
+    "messages": {"columns": ["id INTEGER PRIMARY KEY", "board_id INTEGER NOT NULL REFERENCES boards(id)", "role TEXT NOT NULL", "content TEXT NOT NULL", "created_at TEXT NOT NULL"]}
+  },
+  "constraints": [
+    "Each user has one board.",
+    "Each board has five seeded columns with fixed positions 0 through 4.",
+    "Cards are ordered by position within their column.",
+    "Messages are ordered by created_at and persist with the board."
+  ],
+  "seed": {"username": "user", "columns": ["Backlog", "Discovery", "In Progress", "Review", "Done"]}
+}
