@@ -1,2 +1,2 @@
 # kanban-bot
-a full stack kanban board with ai chat assistance
+See [README.md](./README.md) for project documentation.
