@@ -1,8 +1,10 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -13,7 +15,13 @@ from app import chat
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
-app = FastAPI(title="Project Management MVP")
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    board.initialize()
+    yield
+
+
+app = FastAPI(title="Project Management MVP", lifespan=lifespan)
 
 
 class LoginRequest(BaseModel):
@@ -129,11 +137,6 @@ def send_chat(username: SignedInUser, payload: ChatRequest) -> dict:
         return chat.ask(username, payload.message)
     except ValueError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
-
-
-@app.get("/")
-def serve_frontend() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

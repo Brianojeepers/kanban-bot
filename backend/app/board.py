@@ -94,7 +94,6 @@ def _require_card(database: sqlite3.Connection, username: str, card_id: str) -> 
 
 
 def board(username: str) -> dict:
-    initialize()
     with connection() as database:
         board_id = _board_id(database, username)
         columns = [dict(row) for row in database.execute("SELECT id, title FROM columns WHERE board_id = ? ORDER BY position", (board_id,))]
@@ -140,13 +139,11 @@ def move_card(database: sqlite3.Connection, username: str, card_id: str, column_
 
 
 def messages(username: str) -> list[dict[str, str]]:
-    initialize()
     with connection() as database:
         rows = database.execute("SELECT role, content FROM messages WHERE board_id = ? ORDER BY created_at, id", (_board_id(database, username),)).fetchall()
     return [dict(row) for row in rows]
 
 
 def add_message(username: str, role: str, content: str) -> None:
-    initialize()
     with connection() as database:
         database.execute("INSERT INTO messages (board_id, role, content) VALUES (?, ?, ?)", (_board_id(database, username), role, content))

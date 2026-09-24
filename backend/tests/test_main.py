@@ -28,12 +28,19 @@ def test_health_check_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_root_serves_the_smoke_test_page() -> None:
+def test_root_serves_the_static_index_page() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Project Management MVP" in response.text
-    assert 'fetch("/api/health")' in response.text
+    assert "text/html" in response.headers["content-type"]
+    assert "<title>Project Management MVP</title>" in response.text
+
+
+def test_startup_creates_the_database(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "fresh.db"))
+    with TestClient(app) as started:
+        started.post("/api/login", json={"username": "user", "password": "password"})
+        assert started.post("/api/columns/col-done/cards", json={"title": "First write"}).status_code == 200
 
 
 def test_login_creates_a_valid_session() -> None:
@@ -256,7 +263,7 @@ def test_existing_position_gaps_are_renumbered_once() -> None:
         database.execute("UPDATE cards SET position = position * 10 + 3")
         database.execute("PRAGMA user_version = 0")
 
-    board_client.get("/api/board")
+    board.initialize()
 
     with board.connection() as database:
         positions = database.execute("SELECT column_id, position FROM cards ORDER BY column_id, position").fetchall()
