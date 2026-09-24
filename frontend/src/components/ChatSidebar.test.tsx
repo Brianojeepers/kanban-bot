@@ -49,6 +49,14 @@ describe("ChatSidebar", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("/api/chat", expect.objectContaining({ body: JSON.stringify({ message: "Line one\nLine two" }) }));
   });
 
+  it("shows the server's reason when the AI reply is rejected", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+      .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ detail: "The AI returned an invalid reply. Please try again." }) }));
+    render(<ChatSidebar onBoardUpdated={vi.fn()} />);
+    await userEvent.type(await screen.findByPlaceholderText("Ask about your board"), "Help{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The AI returned an invalid reply. Please try again.");
+  });
+
   it("shows an error and restores the draft when chat cannot be sent", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) }).mockResolvedValueOnce({ ok: false }));
     render(<ChatSidebar onBoardUpdated={vi.fn()} />);

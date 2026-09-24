@@ -1,7 +1,10 @@
 import json
 import os
+import sqlite3
+from typing import Annotated, Literal
 
 import httpx
+from pydantic import BaseModel, Field, ValidationError
 
 from app import board
 
@@ -14,6 +17,37 @@ Each operation is a flat object using exactly one of these shapes, with ids take
 {"action": "delete_card", "card_id": "<card id>"}
 Use an empty operations array when the board should not change.
 Write the response as short plain text for a chat bubble: no Markdown, and refer to cards and columns by title, never by id."""
+
+
+class CreateCard(BaseModel):
+    action: Literal["create_card"]
+    column_id: str
+    title: str
+    details: str = ""
+
+
+class EditCard(BaseModel):
+    action: Literal["edit_card"]
+    card_id: str
+    title: str
+    details: str = ""
+
+
+class MoveCard(BaseModel):
+    action: Literal["move_card"]
+    card_id: str
+    column_id: str
+    position: int
+
+
+class DeleteCard(BaseModel):
+    action: Literal["delete_card"]
+    card_id: str
+
+
+class Reply(BaseModel):
+    response: str
+    operations: list[Annotated[CreateCard | EditCard | MoveCard | DeleteCard, Field(discriminator="action")]] = []
 
 
 def ask(message: str) -> dict:
@@ -29,19 +63,26 @@ def ask(message: str) -> dict:
         ],
         "response_format": {"type": "json_object"},
     }
-    response = httpx.post("https://openrouter.ai/api/v1/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=payload, timeout=30)
-    response.raise_for_status()
-    result = json.loads(response.json()["choices"][0]["message"]["content"])
-    if not isinstance(result.get("response"), str) or not isinstance(result.get("operations", []), list):
-        raise ValueError("Invalid AI response")
-    with board.connection() as database:
-        for operation in result["operations"]:
-            action = operation.get("action")
-            if action == "create_card": board.create_card(database, operation["column_id"], operation["title"], operation.get("details", ""))
-            elif action == "edit_card": board.update_card(database, operation["card_id"], operation["title"], operation.get("details", ""))
-            elif action == "move_card": board.move_card(database, operation["card_id"], operation["column_id"], operation["position"])
-            elif action == "delete_card": board.delete_card(database, operation["card_id"])
-            else: raise ValueError("Invalid AI operation")
+    try:
+        response = httpx.post("https://openrouter.ai/api/v1/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=payload, timeout=30)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as error:
+        raise ValueError("The AI service did not respond correctly. Please try again.") from error
+    try:
+        reply = Reply.model_validate_json(content)
+    except ValidationError as error:
+        raise ValueError("The AI returned an invalid reply. Please try again.") from error
+    try:
+        with board.connection() as database:
+            for operation in reply.operations:
+                match operation:
+                    case CreateCard(): board.create_card(database, operation.column_id, operation.title, operation.details)
+                    case EditCard(): board.update_card(database, operation.card_id, operation.title, operation.details)
+                    case MoveCard(): board.move_card(database, operation.card_id, operation.column_id, operation.position)
+                    case DeleteCard(): board.delete_card(database, operation.card_id)
+    except sqlite3.IntegrityError as error:
+        raise ValueError("The AI referred to a column that does not exist. Please try again.") from error
     board.add_message("user", message)
-    board.add_message("assistant", result["response"])
-    return {"response": result["response"], "board": board.board(), "messages": board.messages()}
+    board.add_message("assistant", reply.response)
+    return {"response": reply.response, "board": board.board(), "messages": board.messages()}

@@ -23,16 +23,20 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
     setMessages([...history, { role: "user", content: message }]);
     setIsSending(true); setError("");
     formElement.reset();
+    let reason = "";
     try {
       const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
-      if (!response.ok) throw new Error();
       const result = await response.json();
+      if (!response.ok) {
+        if (typeof result.detail === "string") reason = result.detail;
+        throw new Error();
+      }
       setMessages(result.messages);
       onBoardUpdated();
     } catch {
       setMessages(history);
       (formElement.elements.namedItem("message") as HTMLTextAreaElement).value = message;
-      setError("Unable to send message.");
+      setError(reason || "Unable to send message.");
     }
     finally { setIsSending(false); }
   };

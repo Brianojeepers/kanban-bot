@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import httpx
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -118,7 +117,7 @@ def get_messages() -> list[dict[str, str]]:
 def send_chat(payload: ChatRequest) -> dict:
     try:
         return chat.ask(payload.message)
-    except (ValueError, httpx.HTTPError) as error:
+    except ValueError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 
 

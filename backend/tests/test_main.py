@@ -4,6 +4,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -264,3 +266,47 @@ def test_existing_position_gaps_are_renumbered_once() -> None:
         by_column.setdefault(row["column_id"], []).append(row["position"])
     assert all(column_positions == list(range(len(column_positions))) for column_positions in by_column.values())
     assert column_titles(board_client.get("/api/board").json(), "col-backlog") == ["Align roadmap themes", "Gather customer signals"]
+
+
+MALFORMED_AI_REPLIES = {
+    "unknown column": {"response": "ok", "operations": [{"action": "create_card", "column_id": "nope", "title": "x"}]},
+    "missing title": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done"}]},
+    "null details": {"response": "ok", "operations": [{"action": "edit_card", "card_id": "card-1", "title": "x", "details": None}]},
+    "reply is a list": [1],
+    "operation is a string": {"response": "ok", "operations": ["create_card"]},
+    "text position": {"response": "ok", "operations": [{"action": "move_card", "card_id": "card-1", "column_id": "col-done", "position": "top"}]},
+    "unknown action": {"response": "ok", "operations": [{"action": "archive_card", "card_id": "card-1"}]},
+}
+
+
+@pytest.mark.parametrize("reply", MALFORMED_AI_REPLIES.values(), ids=MALFORMED_AI_REPLIES.keys())
+def test_chat_rejects_malformed_ai_replies_without_changing_the_board(monkeypatch, reply) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    board_client = signed_in_client()
+    before = board_client.get("/api/board").json()
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps(reply)}}]}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    response = board_client.post("/api/chat", json={"message": "Do something"})
+
+    assert response.status_code == 502
+    assert "Please try again." in response.json()["detail"]
+    assert board_client.get("/api/board").json() == before
+    assert board_client.get("/api/messages").json() == []
+
+
+def test_chat_reports_an_unexpected_provider_response(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"error": {"message": "Rate limited"}}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    response = signed_in_client().post("/api/chat", json={"message": "Hello"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "The AI service did not respond correctly. Please try again."
