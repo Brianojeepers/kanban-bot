@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app import board, chat
+from app.rate_limit import daily_chat_limiter, describe_wait
 
 
 client = TestClient(app)
@@ -461,7 +462,7 @@ def test_login_is_limited_per_client_and_recovers_after_the_window(monkeypatch) 
     blocked = attempt()
     assert blocked.status_code == 429
     assert blocked.headers["retry-after"] == "60"
-    assert blocked.json()["detail"] == "Too many requests. Try again in 60 seconds."
+    assert blocked.json()["detail"] == "Too many requests. Try again in 1 minute."
 
     now[0] += 60
     assert attempt().status_code == 401
@@ -485,3 +486,34 @@ def test_chat_is_limited_per_user(monkeypatch) -> None:
     assert [board_client.post("/api/chat", json={"message": "Hi"}).status_code for _ in range(10)] == [200] * 10
     assert board_client.post("/api/chat", json={"message": "Hi"}).status_code == 429
     assert len(calls) == 10
+
+
+def test_chat_has_a_daily_limit_that_rolls_over(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    now = [1000.0]
+    monkeypatch.setattr("app.rate_limit.monotonic", lambda: now[0])
+    monkeypatch.setattr(daily_chat_limiter, "limit", 3)
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    board_client = signed_in_client()
+    send = lambda: board_client.post("/api/chat", json={"message": "Hi"})
+
+    for _ in range(3):
+        assert send().status_code == 200
+        now[0] += 3600
+    blocked = send()
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"] == "Too many requests. Try again in 21 hours."
+    assert blocked.headers["retry-after"] == str(24 * 3600 - 3 * 3600)
+
+    now[0] += 21 * 3600
+    assert send().status_code == 200
+
+
+@pytest.mark.parametrize(("seconds", "text"), [(1, "1 second"), (45, "45 seconds"), (60, "1 minute"), (61, "2 minutes"), (3600, "1 hour"), (75600, "21 hours")])
+def test_wait_times_are_described_in_readable_units(seconds, text) -> None:
+    assert describe_wait(seconds) == text

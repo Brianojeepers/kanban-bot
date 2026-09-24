@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.auth import COOKIE_NAME, PASSWORD, USERNAME, create_session, session_username
 from app import board
-from app.rate_limit import chat_limiter, login_limiter
+from app.rate_limit import chat_limiter, daily_chat_limiter, login_limiter
 from app import chat
 
 
@@ -137,8 +137,10 @@ def get_messages(username: SignedInUser) -> list[dict[str, str]]:
 
 @app.post("/api/chat")
 def send_chat(username: SignedInUser, payload: ChatRequest) -> dict:
-    chat_limiter.check(username)
-    chat_limiter.record(username)
+    for limiter in (chat_limiter, daily_chat_limiter):
+        limiter.check(username)
+    for limiter in (chat_limiter, daily_chat_limiter):
+        limiter.record(username)
     try:
         return chat.ask(username, payload.message)
     except ValueError as error:
