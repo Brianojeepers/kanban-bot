@@ -20,4 +20,8 @@ COPY --from=frontend-build /frontend/out ./static
 
 EXPOSE 8000
 
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--loop", "asyncio"]
+RUN useradd --system --create-home app && mkdir -p /data
+
+# Start as root only to give the data volume (possibly created by an older root-run image) to the
+# app user, then run the server as that user.
+CMD ["sh", "-c", "chown -R app:app /data && exec setpriv --reuid=app --regid=app --init-groups /app/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio"]
