@@ -3,7 +3,10 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
+
+from pydantic import StringConstraints
 
 
 DEFAULT_COLUMNS = ["Backlog", "Discovery", "In Progress", "Review", "Done"]
@@ -17,6 +20,12 @@ DEFAULT_CARDS = [
     ("card-7", "col-done", "Ship marketing page", "Final copy approved and asset pack delivered."),
     ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally."),
 ]
+
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class NotFoundError(ValueError):
+    pass
 
 
 @contextmanager
@@ -77,22 +86,26 @@ def board() -> dict:
 
 
 def rename_column(database: sqlite3.Connection, column_id: str, title: str) -> None:
-    database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
+    if database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id)).rowcount == 0:
+        raise NotFoundError(f"Column {column_id} does not exist")
 
 
 def create_card(database: sqlite3.Connection, column_id: str, title: str, details: str) -> None:
+    if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
+        raise NotFoundError(f"Column {column_id} does not exist")
     position = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
     database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (f"card-{uuid4().hex}", column_id, title, details or "No details yet.", position))
 
 
 def update_card(database: sqlite3.Connection, card_id: str, title: str, details: str) -> None:
-    database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id))
+    if database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id)).rowcount == 0:
+        raise NotFoundError(f"Card {card_id} does not exist")
 
 
 def delete_card(database: sqlite3.Connection, card_id: str) -> None:
     card = database.execute("SELECT column_id, position FROM cards WHERE id = ?", (card_id,)).fetchone()
     if not card:
-        return
+        raise NotFoundError(f"Card {card_id} does not exist")
     database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
     database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (card["column_id"], card["position"]))
 
@@ -100,9 +113,9 @@ def delete_card(database: sqlite3.Connection, card_id: str) -> None:
 def move_card(database: sqlite3.Connection, card_id: str, column_id: str, position: int) -> None:
     card = database.execute("SELECT column_id, title, details, position FROM cards WHERE id = ?", (card_id,)).fetchone()
     if not card:
-        raise ValueError("Card does not exist")
+        raise NotFoundError(f"Card {card_id} does not exist")
     if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
-        raise ValueError("Column does not exist")
+        raise NotFoundError(f"Column {column_id} does not exist")
 
     source_column_id = card["column_id"]
     database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (source_column_id, card["position"]))

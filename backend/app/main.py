@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -21,11 +21,11 @@ class LoginRequest(BaseModel):
 
 
 class ColumnRequest(BaseModel):
-    title: str
+    title: board.Title
 
 
 class CardRequest(BaseModel):
-    title: str
+    title: board.Title
     details: str = ""
 
 
@@ -41,6 +41,11 @@ class ChatRequest(BaseModel):
 def require_session(pm_session: str | None = Cookie(default=None)) -> None:
     if not is_valid_session(pm_session):
         raise HTTPException(status_code=401, detail="Not signed in")
+
+
+@app.exception_handler(board.NotFoundError)
+def not_found(_request: Request, error: board.NotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(error)})
 
 
 @app.get("/api/health")

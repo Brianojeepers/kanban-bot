@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 from typing import Annotated, Literal
 
 import httpx
@@ -16,20 +15,21 @@ Each operation is a flat object using exactly one of these shapes, with ids take
 {"action": "move_card", "card_id": "<card id>", "column_id": "<column id>", "position": <0-based index in the destination column>}
 {"action": "delete_card", "card_id": "<card id>"}
 Use an empty operations array when the board should not change.
+A card created in this reply has no id yet, so never edit, move or delete it in the same reply; create it with its final title, details and column instead.
 Write the response as short plain text for a chat bubble: no Markdown, and refer to cards and columns by title, never by id."""
 
 
 class CreateCard(BaseModel):
     action: Literal["create_card"]
     column_id: str
-    title: str
+    title: board.Title
     details: str = ""
 
 
 class EditCard(BaseModel):
     action: Literal["edit_card"]
     card_id: str
-    title: str
+    title: board.Title
     details: str = ""
 
 
@@ -81,8 +81,8 @@ def ask(message: str) -> dict:
                     case EditCard(): board.update_card(database, operation.card_id, operation.title, operation.details)
                     case MoveCard(): board.move_card(database, operation.card_id, operation.column_id, operation.position)
                     case DeleteCard(): board.delete_card(database, operation.card_id)
-    except sqlite3.IntegrityError as error:
-        raise ValueError("The AI referred to a column that does not exist. Please try again.") from error
+    except board.NotFoundError as error:
+        raise ValueError("The AI referred to a card or column that does not exist. Please try again.") from error
     board.add_message("user", message)
     board.add_message("assistant", reply.response)
     return {"response": reply.response, "board": board.board(), "messages": board.messages()}

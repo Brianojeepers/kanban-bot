@@ -276,6 +276,8 @@ MALFORMED_AI_REPLIES = {
     "operation is a string": {"response": "ok", "operations": ["create_card"]},
     "text position": {"response": "ok", "operations": [{"action": "move_card", "card_id": "card-1", "column_id": "col-done", "position": "top"}]},
     "unknown action": {"response": "ok", "operations": [{"action": "archive_card", "card_id": "card-1"}]},
+    "made-up card id after create": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done", "title": "Temp"}, {"action": "delete_card", "card_id": "card-temp-1"}]},
+    "blank title": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done", "title": "  "}]},
 }
 
 
@@ -310,3 +312,44 @@ def test_chat_reports_an_unexpected_provider_response(monkeypatch) -> None:
 
     assert response.status_code == 502
     assert response.json()["detail"] == "The AI service did not respond correctly. Please try again."
+
+
+@pytest.mark.parametrize(("method", "path", "body"), [
+    ("patch", "/api/columns/nope", {"title": "x"}),
+    ("post", "/api/columns/nope/cards", {"title": "x"}),
+    ("patch", "/api/cards/nope", {"title": "x"}),
+    ("delete", "/api/cards/nope", None),
+    ("post", "/api/cards/nope/move", {"column_id": "col-done", "position": 0}),
+    ("post", "/api/cards/card-1/move", {"column_id": "nope", "position": 0}),
+])
+def test_unknown_ids_return_not_found_without_changing_the_board(method, path, body) -> None:
+    board_client = signed_in_client()
+    before = board_client.get("/api/board").json()
+
+    response = board_client.request(method.upper(), path, json=body)
+
+    assert response.status_code == 404
+    assert "does not exist" in response.json()["detail"]
+    assert board_client.get("/api/board").json() == before
+
+
+@pytest.mark.parametrize(("method", "path"), [
+    ("patch", "/api/columns/col-done"),
+    ("post", "/api/columns/col-done/cards"),
+    ("patch", "/api/cards/card-1"),
+])
+@pytest.mark.parametrize("title", ["", "   "])
+def test_empty_titles_are_rejected(method, path, title) -> None:
+    board_client = signed_in_client()
+    before = board_client.get("/api/board").json()
+
+    assert board_client.request(method.upper(), path, json={"title": title}).status_code == 422
+    assert board_client.get("/api/board").json() == before
+
+
+def test_titles_are_saved_trimmed() -> None:
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    updated = board_client.patch("/api/columns/col-done", json={"title": "  Shipped  "}).json()
+
+    assert updated["columns"][4]["title"] == "Shipped"
