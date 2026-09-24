@@ -53,8 +53,8 @@ Full app (Docker, served at http://localhost:8000; needs `OPENROUTER_API_KEY` in
 - `scripts/start.sh` / `scripts/stop.sh` (`.ps1` on Windows). Stopping keeps the `pm_data` volume that holds `/data/pm.db`.
 
 Backend (`cd backend`, managed with `uv`):
-- `DATABASE_PATH=/tmp/pm-test.db uv run pytest --cov` runs all tests. Without `DATABASE_PATH`, the database defaults to `/data/pm.db`. Coverage must be at least 80% with branch coverage on.
-- Single test: `DATABASE_PATH=/tmp/pm-test.db uv run pytest tests/test_main.py::test_health_check_returns_ok`
+- `uv run pytest --cov` runs all tests. Each test gets its own temporary SQLite database (`tests/conftest.py`). Coverage must be at least 80% with branch coverage on.
+- Single test: `uv run pytest tests/test_main.py::test_health_check_returns_ok`
 - Local server: `DATABASE_PATH=/tmp/pm.db uv run uvicorn app.main:app --reload`
 
 Frontend (`cd frontend`):
