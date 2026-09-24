@@ -12,8 +12,8 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
-COPY backend/pyproject.toml ./
-RUN uv sync --no-dev --no-install-project
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY backend/app ./app
 COPY --from=frontend-build /frontend/out ./static
