@@ -162,3 +162,19 @@ def test_chat_rejects_missing_key_and_invalid_operations(monkeypatch) -> None:
         def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"No","operations":[{"action":"bad"}]}'}}]}
     monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
     assert signed_in_client().post("/api/chat", json={"message": "Hello"}).status_code == 502
+
+
+def test_chat_applies_no_operations_when_any_is_invalid(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    board_client = signed_in_client()
+    before = board_client.get("/api/board").json()
+    column_id = before["columns"][0]["id"]
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": f'{{"response":"Done.","operations":[{{"action":"create_card","column_id":"{column_id}","title":"Partial"}},{{"action":"bad"}}]}}'}}]}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+
+    assert board_client.post("/api/chat", json={"message": "Add a task"}).status_code == 502
+    assert board_client.get("/api/board").json() == before

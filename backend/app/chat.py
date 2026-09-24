@@ -24,13 +24,14 @@ def ask(message: str) -> dict:
     result = json.loads(response.json()["choices"][0]["message"]["content"])
     if not isinstance(result.get("response"), str) or not isinstance(result.get("operations", []), list):
         raise ValueError("Invalid AI response")
-    for operation in result["operations"]:
-        action = operation.get("action")
-        if action == "create_card": board.create_card(operation["column_id"], operation["title"], operation.get("details", ""))
-        elif action == "edit_card": board.update_card(operation["card_id"], operation["title"], operation.get("details", ""))
-        elif action == "move_card": board.move_card(operation["card_id"], operation["column_id"], operation["position"])
-        elif action == "delete_card": board.delete_card(operation["card_id"])
-        else: raise ValueError("Invalid AI operation")
+    with board.connection() as database:
+        for operation in result["operations"]:
+            action = operation.get("action")
+            if action == "create_card": board.create_card(database, operation["column_id"], operation["title"], operation.get("details", ""))
+            elif action == "edit_card": board.update_card(database, operation["card_id"], operation["title"], operation.get("details", ""))
+            elif action == "move_card": board.move_card(database, operation["card_id"], operation["column_id"], operation["position"])
+            elif action == "delete_card": board.delete_card(database, operation["card_id"])
+            else: raise ValueError("Invalid AI operation")
     board.add_message("user", message)
     board.add_message("assistant", result["response"])
     return {"response": result["response"], "board": board.board(), "messages": board.messages()}

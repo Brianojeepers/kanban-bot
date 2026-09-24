@@ -61,48 +61,37 @@ def board() -> dict:
         return {"columns": columns, "cards": cards}
 
 
-def rename_column(column_id: str, title: str) -> dict:
-    with connection() as database:
-        database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
-    return board()
+def rename_column(database: sqlite3.Connection, column_id: str, title: str) -> None:
+    database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
 
 
-def create_card(column_id: str, title: str, details: str) -> dict:
-    card_id = f"card-{uuid4().hex}"
-    with connection() as database:
-        position = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
-        database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, title, details or "No details yet.", position))
-    return board()
+def create_card(database: sqlite3.Connection, column_id: str, title: str, details: str) -> None:
+    position = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
+    database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (f"card-{uuid4().hex}", column_id, title, details or "No details yet.", position))
 
 
-def update_card(card_id: str, title: str, details: str) -> dict:
-    with connection() as database:
-        database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id))
-    return board()
+def update_card(database: sqlite3.Connection, card_id: str, title: str, details: str) -> None:
+    database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id))
 
 
-def delete_card(card_id: str) -> dict:
-    with connection() as database:
-        database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
-    return board()
+def delete_card(database: sqlite3.Connection, card_id: str) -> None:
+    database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
 
 
-def move_card(card_id: str, column_id: str, position: int) -> dict:
-    with connection() as database:
-        card = database.execute("SELECT column_id, title, details, position FROM cards WHERE id = ?", (card_id,)).fetchone()
-        if not card:
-            raise ValueError("Card does not exist")
-        if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
-            raise ValueError("Column does not exist")
+def move_card(database: sqlite3.Connection, card_id: str, column_id: str, position: int) -> None:
+    card = database.execute("SELECT column_id, title, details, position FROM cards WHERE id = ?", (card_id,)).fetchone()
+    if not card:
+        raise ValueError("Card does not exist")
+    if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
+        raise ValueError("Column does not exist")
 
-        source_column_id = card["column_id"]
-        database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (source_column_id, card["position"]))
-        database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
-        destination_count = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
-        destination_position = max(0, min(position, destination_count))
-        database.execute("UPDATE cards SET position = position + 1 WHERE column_id = ? AND position >= ?", (column_id, destination_position))
-        database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, card["title"], card["details"], destination_position))
-    return board()
+    source_column_id = card["column_id"]
+    database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (source_column_id, card["position"]))
+    database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    destination_count = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
+    destination_position = max(0, min(position, destination_count))
+    database.execute("UPDATE cards SET position = position + 1 WHERE column_id = ? AND position >= ?", (column_id, destination_position))
+    database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, card["title"], card["details"], destination_position))
 
 
 def messages() -> list[dict[str, str]]:

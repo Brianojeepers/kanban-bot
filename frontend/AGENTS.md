@@ -2,26 +2,29 @@
 
 ## Purpose
 
-This directory contains the current Next.js Kanban demo. It is client-only today: board data is initialized in memory and resets on page reload. Later phases replace that state with authenticated FastAPI requests without duplicating board behavior.
+This directory contains the Next.js Kanban app. It is statically exported (`output: "export"`) and served by FastAPI on the same origin. Board data, sign in, and chat come from the authenticated FastAPI API.
 
 ## Structure
 
-- `src/app/page.tsx` renders `KanbanBoard` at `/`.
+- `src/app/page.tsx` renders `AuthGate` at `/`.
+- `src/components/AuthGate.tsx` checks the session, shows the sign-in form or the board with the chat sidebar, and remounts the board after chat updates.
+- `src/components/ChatSidebar.tsx` loads and sends chat messages through `/api/messages` and `/api/chat`.
 - `src/app/layout.tsx` defines metadata and the Manrope and Space Grotesk fonts.
 - `src/app/globals.css` defines the shared color variables and global styles.
-- `src/components/KanbanBoard.tsx` owns board state and DnD Kit event handling.
+- `src/components/KanbanBoard.tsx` owns board state, API mutations, and DnD Kit event handling.
 - `src/components/KanbanColumn.tsx` renders a droppable column, its rename input, cards, empty state, and new-card form.
-- `src/components/KanbanCard.tsx` renders a sortable card and its delete control.
+- `src/components/KanbanCard.tsx` renders a sortable card with its edit and delete controls.
 - `src/components/KanbanCardPreview.tsx` renders the active drag overlay.
 - `src/components/NewCardForm.tsx` owns the add-card form's open, submit, validation, and cancel states.
-- `src/lib/kanban.ts` contains board types, demo seed data, card-move logic, and ID creation.
+- `src/lib/api.ts` is the client API module for board reads and mutations.
+- `src/lib/kanban.ts` contains board types, initial placeholder data, card-move logic, and ID creation.
 - `src/**/*.test.tsx` and `src/**/*.test.ts` are Vitest unit and component tests.
 - `tests/` contains Playwright browser integration tests.
 
 ## Current Behavior
 
 - The board has exactly five ordered columns. Their titles can change; their count and order do not.
-- Cards contain a title and details. The current demo supports adding, deleting, reordering, and moving cards; editing existing cards is planned for the API-backed board.
+- Cards contain a title and details. Cards can be added, edited, deleted, reordered, and moved; every change is persisted through the API.
 - `moveCard` is the source of truth for same-column ordering and cross-column insertion.
 - The visual system uses the color variables in `globals.css`: yellow accent, blue primary, purple secondary, navy headings, and gray supporting text.
 
@@ -32,9 +35,9 @@ This directory contains the current Next.js Kanban demo. It is client-only today
 - Run `npm run test:unit` for Vitest, `npm run test:e2e` for Playwright, and `npm run test:all` for both.
 - Maintain at least 80% statement, branch, function, and line unit-test coverage. Cover critical board workflows in Playwright.
 
-## Future API Boundary
+## API Boundary
 
 - Keep OpenRouter keys, session secrets, and database access out of this directory's browser code.
-- Future board reads and mutations use the FastAPI API on the same origin, authenticated by an HTTP-only cookie.
-- Keep existing component ownership where practical: the board remains responsible for orchestration, while data loading and mutations move behind a focused client API module.
+- Board reads and mutations use the FastAPI API on the same origin, authenticated by an HTTP-only cookie.
+- The board remains responsible for orchestration; data loading and mutations go through `src/lib/api.ts`.
 - Do not add column creation, deletion, or reordering. The fixed five-column contract must remain valid for API and AI operations.

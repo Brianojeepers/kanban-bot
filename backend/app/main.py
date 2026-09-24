@@ -76,27 +76,37 @@ def get_board() -> dict:
 
 @app.patch("/api/columns/{column_id}", dependencies=[Depends(require_session)])
 def rename_board_column(column_id: str, payload: ColumnRequest) -> dict:
-    return board.rename_column(column_id, payload.title)
+    with board.connection() as database:
+        board.rename_column(database, column_id, payload.title)
+    return board.board()
 
 
 @app.post("/api/columns/{column_id}/cards", dependencies=[Depends(require_session)])
 def add_board_card(column_id: str, payload: CardRequest) -> dict:
-    return board.create_card(column_id, payload.title, payload.details)
+    with board.connection() as database:
+        board.create_card(database, column_id, payload.title, payload.details)
+    return board.board()
 
 
 @app.patch("/api/cards/{card_id}", dependencies=[Depends(require_session)])
 def edit_board_card(card_id: str, payload: CardRequest) -> dict:
-    return board.update_card(card_id, payload.title, payload.details)
+    with board.connection() as database:
+        board.update_card(database, card_id, payload.title, payload.details)
+    return board.board()
 
 
 @app.delete("/api/cards/{card_id}", dependencies=[Depends(require_session)])
 def remove_board_card(card_id: str) -> dict:
-    return board.delete_card(card_id)
+    with board.connection() as database:
+        board.delete_card(database, card_id)
+    return board.board()
 
 
 @app.post("/api/cards/{card_id}/move", dependencies=[Depends(require_session)])
 def move_board_card(card_id: str, payload: MoveRequest) -> dict:
-    return board.move_card(card_id, payload.column_id, payload.position)
+    with board.connection() as database:
+        board.move_card(database, card_id, payload.column_id, payload.position)
+    return board.board()
 
 
 @app.get("/api/messages", dependencies=[Depends(require_session)])

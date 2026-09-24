@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This directory contains the FastAPI smoke-test application. It will serve the statically exported Next.js frontend and authenticated API at `http://localhost:8000` in later phases. Use `uv` for Python dependency management and execution in Docker.
+This directory contains the FastAPI application. It serves the statically exported Next.js frontend and the authenticated API at `http://localhost:8000`. Use `uv` for Python dependency management and execution in Docker.
 
 ## Architecture
 
