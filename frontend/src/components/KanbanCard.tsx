@@ -33,19 +33,17 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
       {...listeners}
       data-testid={`card-${card.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
-            {card.title}
-          </h4>
-          <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-            {card.details}
-          </p></>}
-        </div>
+      {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
+        {card.title}
+      </h4>
+      <p className="mt-2 break-words text-sm leading-6 text-[var(--gray-text)]">
+        {card.details}
+      </p></>}
+      <div className="mt-3 flex items-center justify-end gap-2">
         {!isEditing && <button
           type="button"
           onClick={() => setIsEditing(true)}
-          className="text-xs font-semibold text-[var(--primary-blue)]"
+          className="px-2 py-1 text-xs font-semibold text-[var(--primary-blue)]"
         >Edit</button>}
         <button
           type="button"
