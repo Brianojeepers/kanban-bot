@@ -57,7 +57,7 @@ test("moves a card between columns", async ({ page }) => {
   await page.mouse.down();
   await page.mouse.move(
     columnBox.x + columnBox.width / 2,
-    columnBox.y + 120,
+    cardBox.y + cardBox.height / 2,
     { steps: 12 }
   );
   await page.mouse.up();
@@ -76,6 +76,8 @@ test("moves a card from Backlog to Discovery and back without duplication", asyn
   await backlog.getByRole("button", { name: /add card/i }).click();
 
   const moveCard = async (source: typeof backlog, destination: typeof discovery) => {
+    // Wait for the previous drop animation: its drag preview (the only card without a test id) intercepts the next press.
+    await expect(page.locator("article:not([data-testid])")).toHaveCount(0);
     const card = source.locator('[data-testid^="card-"]').filter({ hasText: title });
     await card.scrollIntoViewIfNeeded();
     await destination.scrollIntoViewIfNeeded();
@@ -84,7 +86,7 @@ test("moves a card from Backlog to Discovery and back without duplication", asyn
     if (!cardBox || !destinationBox) throw new Error("Unable to resolve drag coordinates.");
     await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(destinationBox.x + destinationBox.width / 2, destinationBox.y + 120, { steps: 12 });
+    await page.mouse.move(destinationBox.x + destinationBox.width / 2, cardBox.y + cardBox.height / 2, { steps: 12 });
     await page.mouse.up();
   };
 
