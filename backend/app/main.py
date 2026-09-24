@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.auth import COOKIE_NAME, PASSWORD, USERNAME, create_session, session_username
 from app import board
+from app.rate_limit import chat_limiter, login_limiter
 from app import chat
 
 
@@ -68,8 +69,11 @@ def health_check() -> dict[str, str]:
 
 
 @app.post("/api/login")
-def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
+def login(credentials: LoginRequest, request: Request, response: Response) -> dict[str, str]:
+    client = request.client.host if request.client else "unknown"
+    login_limiter.check(client)
     if credentials.username != USERNAME or credentials.password != PASSWORD:
+        login_limiter.record(client)
         raise HTTPException(status_code=401, detail="Invalid username or password")
     response.set_cookie(COOKIE_NAME, create_session(USERNAME), httponly=True, samesite="lax")
     return {"username": USERNAME}
@@ -133,6 +137,8 @@ def get_messages(username: SignedInUser) -> list[dict[str, str]]:
 
 @app.post("/api/chat")
 def send_chat(username: SignedInUser, payload: ChatRequest) -> dict:
+    chat_limiter.check(username)
+    chat_limiter.record(username)
     try:
         return chat.ask(username, payload.message)
     except ValueError as error:

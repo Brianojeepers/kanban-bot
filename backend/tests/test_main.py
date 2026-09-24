@@ -450,3 +450,38 @@ def test_chat_sends_only_recent_history_to_the_model(monkeypatch) -> None:
     assert history[0]["content"] == "Old message 10"
     assert history[-1]["content"] == "Old message 29"
     assert sent["messages"][-1]["content"].endswith("Question: Latest")
+
+
+def test_login_is_limited_per_client_and_recovers_after_the_window(monkeypatch) -> None:
+    now = [1000.0]
+    monkeypatch.setattr("app.rate_limit.monotonic", lambda: now[0])
+    attempt = lambda: TestClient(app).post("/api/login", json={"username": "user", "password": "wrong"})
+
+    assert [attempt().status_code for _ in range(10)] == [401] * 10
+    blocked = attempt()
+    assert blocked.status_code == 429
+    assert blocked.headers["retry-after"] == "60"
+    assert blocked.json()["detail"] == "Too many requests. Try again in 60 seconds."
+
+    now[0] += 60
+    assert attempt().status_code == 401
+
+
+def test_successful_logins_do_not_count_towards_the_limit() -> None:
+    assert all(signed_in_client().get("/api/session").status_code == 200 for _ in range(15))
+
+
+def test_chat_is_limited_per_user(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
+
+    calls = []
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: calls.append(1) or Response())
+    board_client = signed_in_client()
+
+    assert [board_client.post("/api/chat", json={"message": "Hi"}).status_code for _ in range(10)] == [200] * 10
+    assert board_client.post("/api/chat", json={"message": "Hi"}).status_code == 429
+    assert len(calls) == 10

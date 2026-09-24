@@ -28,7 +28,8 @@ export const AuthGate = () => {
       setIsSignedIn(true);
       return;
     }
-    setError("Invalid username or password.");
+    const tooManyAttempts = response.status === 429 ? (await response.json()).detail : "";
+    setError(tooManyAttempts || "Invalid username or password.");
   };
 
   const logout = async () => {

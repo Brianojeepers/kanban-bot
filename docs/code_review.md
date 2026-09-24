@@ -301,7 +301,7 @@ Action: add a test with each fix above, as listed in its action.
 | AI operation loop not atomic | Fixed. Operations run in one transaction, covered by `test_chat_applies_no_operations_when_any_is_invalid` |
 | Session secret insecure default | Still open. Now shown to be exploitable in the current setup (H1) |
 | Hardcoded credentials | Open by design for the MVP |
-| No rate limiting on login and chat | Open. Lower priority once H1 is fixed |
+| No rate limiting on login and chat | Fixed later. Failed sign-ins are limited to 10 per minute per client and chat to 10 per minute per user |
 | No CSRF token beyond `SameSite=Lax` | Open. Acceptable for localhost |
 | No migrations, backups, CI, logging | Open. Relevant only beyond local use |
 | Leftover test data from E2E runs | Fixed. The E2E suite now deletes its cards after each test |
@@ -352,4 +352,4 @@ Corrections to the review itself:
 - **M1** said 484 MB of `node_modules` was sent as build context. BuildKit transfers the context incrementally, so the size sent varied. What was confirmed is that macOS native packages ended up in the Linux build stage.
 - **L8** called running as non-root a one-line change. It isn't: existing volumes were created by the root-run image, so a plain `USER` switch would have left the database unwritable. The fix hands `/data` to the app user at startup.
 
-Still open, by design for the local MVP (see `review.md`): hardcoded credentials, no rate limiting, no CI, backups or monitoring. Before a second account is added, the seed needs board-specific column and card IDs.
+Still open, by design for the local MVP (see `review.md`): hardcoded credentials, no CI, backups or monitoring. Rate limiting was added after this review. Before a second account is added, the seed needs board-specific column and card IDs.

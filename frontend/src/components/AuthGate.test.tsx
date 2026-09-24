@@ -39,4 +39,14 @@ describe("AuthGate", () => {
     expect(await screen.findByLabelText("Username")).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("Unable to reach the server.");
   });
+
+  it("shows the wait time when there have been too many sign-in attempts", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false, status: 429, json: () => Promise.resolve({ detail: "Too many requests. Try again in 42 seconds." }) }));
+    render(<AuthGate />);
+    await userEvent.type(await screen.findByLabelText("Username"), "user");
+    await userEvent.type(screen.getByLabelText("Password"), "wrong");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests. Try again in 42 seconds.");
+  });
 });

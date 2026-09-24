@@ -78,6 +78,7 @@ what's needed to take it from "working demo" to "production-ready product."
 - **No rate limiting.** Both `/api/login` (brute-force risk) and `/api/chat`
   (cost-control risk — every call spends real money against the OpenRouter
   key) currently accept unlimited requests.
+  **Resolved:** failed sign-ins are limited to 10 per minute per client and chat to 10 messages per minute per user (in memory, returning 429).
 - **No CSRF defense beyond `SameSite=Lax`.** Adequate for many cases, but a
   dedicated CSRF token would be the more rigorous approach once this is
   exposed beyond a local, single-user context.
