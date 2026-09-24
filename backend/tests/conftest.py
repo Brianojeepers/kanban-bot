@@ -1,4 +1,8 @@
+import os
+
 import pytest
+
+os.environ.setdefault("SESSION_SECRET", "test-secret")
 
 
 @pytest.fixture(autouse=True)

@@ -49,13 +49,13 @@ The MVP is complete. The Next.js frontend in frontend/ is statically exported an
 
 ## Commands
 
-Full app (Docker, served at http://localhost:8000; needs `OPENROUTER_API_KEY` in root `.env`):
+Full app (Docker, served at http://localhost:8000 on localhost only; needs `OPENROUTER_API_KEY` and `SESSION_SECRET` in root `.env`, e.g. `python3 -c 'import secrets; print(secrets.token_hex(32))'` for the secret):
 - `scripts/start.sh` / `scripts/stop.sh` (`.ps1` on Windows). Stopping keeps the `pm_data` volume that holds `/data/pm.db`.
 
 Backend (`cd backend`, managed with `uv`):
 - `uv run pytest --cov` runs all tests. Each test gets its own temporary SQLite database (`tests/conftest.py`). Coverage must be at least 80% with branch coverage on.
 - Single test: `uv run pytest tests/test_main.py::test_health_check_returns_ok`
-- Local server: `DATABASE_PATH=/tmp/pm.db uv run uvicorn app.main:app --reload`
+- Local server: `DATABASE_PATH=/tmp/pm.db SESSION_SECRET=dev uv run uvicorn app.main:app --reload`
 
 Frontend (`cd frontend`):
 - `npm run dev`, `npm run build` (static export to `out/`), `npm run lint`
@@ -69,7 +69,7 @@ The app is one Docker image. A Node stage builds the Next.js app with `output: "
 
 Backend (`backend/app/`):
 - `main.py`: thin route handlers. The `require_session` dependency protects every board and chat endpoint. Every mutation endpoint returns the full updated board.
-- `auth.py`: fixed `user`/`password` login and an HMAC-signed, HTTP-only `pm_session` cookie. The signing key comes from `SESSION_SECRET`, with a development fallback.
+- `auth.py`: fixed `user`/`password` login and an HMAC-signed, HTTP-only `pm_session` cookie. The signing key comes from `SESSION_SECRET`; the app refuses to start without it.
 - `board.py`: SQLite access with raw `sqlite3`. `initialize()` creates the tables and seeds the user, the five columns, and the demo cards; it runs on each read. Cards keep an explicit `position` within each column, and `move_card` shifts positions in both the source and destination columns. The schema supports multiple users (see `docs/database-schema.json`), but queries are currently hardcoded to the `user` account.
 - `chat.py`: calls OpenRouter (`openai/gpt-oss-120b`) through `httpx` in JSON mode. It sends chat history plus the current board, then applies the returned `create_card`/`edit_card`/`move_card`/`delete_card` operations through the same `board.py` functions the HTTP routes use, and saves both messages. Tests mock `chat.httpx.post`.
 

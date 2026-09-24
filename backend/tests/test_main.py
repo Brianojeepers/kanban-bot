@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import subprocess
+import sys
 
 from fastapi.testclient import TestClient
 
@@ -50,6 +53,14 @@ def test_session_rejects_invalid_cookie() -> None:
     response = TestClient(app).get("/api/session", cookies={"pm_session": "invalid"})
 
     assert response.status_code == 401
+
+
+def test_app_refuses_to_start_without_a_session_secret() -> None:
+    environment = {key: value for key, value in os.environ.items() if key != "SESSION_SECRET"}
+    result = subprocess.run([sys.executable, "-c", "import app.main"], env=environment, capture_output=True, text=True)
+
+    assert result.returncode != 0
+    assert "SESSION_SECRET is not set" in result.stderr
 
 
 def test_logout_clears_the_session_cookie() -> None:

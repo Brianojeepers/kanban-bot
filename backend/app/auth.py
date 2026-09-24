@@ -6,11 +6,13 @@ import os
 COOKIE_NAME = "pm_session"
 USERNAME = "user"
 PASSWORD = "password"
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+if not SESSION_SECRET:
+    raise RuntimeError("SESSION_SECRET is not set. Add it to .env, for example the output of: python -c 'import secrets; print(secrets.token_hex(32))'")
 
 
 def _signature(username: str) -> str:
-    secret = os.environ.get("SESSION_SECRET", "local-development-secret")
-    return hmac.new(secret.encode(), username.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(SESSION_SECRET.encode(), username.encode(), hashlib.sha256).hexdigest()
 
 
 def create_session(username: str) -> str:
