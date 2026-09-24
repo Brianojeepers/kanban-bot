@@ -6,6 +6,13 @@ const signIn = async (page: import("@playwright/test").Page) => {
   await page.getByRole("button", { name: "Sign in" }).click();
 };
 
+test.afterEach(async ({ page }) => {
+  const board = await (await page.request.get("/api/board")).json();
+  for (const card of Object.values(board.cards) as { id: string; title: string }[]) {
+    if (/^(Playwright card|Drag card|Adjacent move) \d+$/.test(card.title)) await page.request.delete(`/api/cards/${card.id}`);
+  }
+});
+
 test("loads the kanban board", async ({ page }) => {
   await page.goto("/");
   await signIn(page);

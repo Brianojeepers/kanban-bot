@@ -1,3 +1,6 @@
+import json
+import re
+
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -178,3 +181,31 @@ def test_chat_applies_no_operations_when_any_is_invalid(monkeypatch) -> None:
 
     assert board_client.post("/api/chat", json={"message": "Add a task"}).status_code == 502
     assert board_client.get("/api/board").json() == before
+
+
+def test_chat_accepts_every_operation_shape_in_the_system_prompt(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    examples = [line for line in chat.SYSTEM_PROMPT.splitlines() if line.startswith('{"action"')]
+    filled = [re.sub(r"<0-based[^>]*>", "0", line).replace("<column id>", "col-done").replace("<card id>", "card-1").replace("<title>", "From prompt").replace("<details>", "") for line in examples]
+    operations = [json.loads(line) for line in filled]
+    assert [operation["action"] for operation in operations] == ["create_card", "edit_card", "move_card", "delete_card"]
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps({"response": "Done.", "operations": operations})}}]}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    response = signed_in_client().post("/api/chat", json={"message": "Use every operation"})
+
+    assert response.status_code == 200
+    cards = response.json()["board"]["cards"]
+    assert "card-1" not in cards
+    assert [card["title"] for card in cards.values()].count("From prompt") == 1
+
+
+def test_deleted_demo_card_stays_deleted() -> None:
+    board_client = signed_in_client()
+    assert "card-1" in board_client.get("/api/board").json()["cards"]
+    board_client.delete("/api/cards/card-1")
+
+    assert "card-1" not in board_client.get("/api/board").json()["cards"]

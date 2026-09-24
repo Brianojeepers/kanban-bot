@@ -51,10 +51,10 @@ def initialize() -> None:
                 "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
                 [(f"col-{title.lower().replace(' ', '-')}", board_id, title, position) for position, title in enumerate(DEFAULT_COLUMNS)],
             )
-        database.executemany(
-            "INSERT OR IGNORE INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
-            [(card_id, column_id, title, details, position) for position, (card_id, column_id, title, details) in enumerate(DEFAULT_CARDS)],
-        )
+            database.executemany(
+                "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
+                [(card_id, column_id, title, details, position) for position, (card_id, column_id, title, details) in enumerate(DEFAULT_CARDS)],
+            )
 
 
 def board() -> dict:
