@@ -1,5 +1,7 @@
 import os
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,13 +19,18 @@ DEFAULT_CARDS = [
 ]
 
 
-def connection() -> sqlite3.Connection:
+@contextmanager
+def connection() -> Iterator[sqlite3.Connection]:
     database_path = Path(os.environ.get("DATABASE_PATH", "/data/pm.db"))
     database_path.parent.mkdir(parents=True, exist_ok=True)
     database = sqlite3.connect(database_path)
     database.row_factory = sqlite3.Row
     database.execute("PRAGMA foreign_keys = ON")
-    return database
+    try:
+        with database:
+            yield database
+    finally:
+        database.close()
 
 
 def initialize() -> None:
