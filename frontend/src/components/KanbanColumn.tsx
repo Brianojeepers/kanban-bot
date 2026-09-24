@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
@@ -23,6 +24,18 @@ export const KanbanColumn = ({
   onEditCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const [draftTitle, setDraftTitle] = useState(column.title);
+  const [savedTitle, setSavedTitle] = useState(column.title);
+  if (column.title !== savedTitle) {
+    setSavedTitle(column.title);
+    setDraftTitle(column.title);
+  }
+
+  const saveTitle = () => {
+    const title = draftTitle.trim();
+    if (title && title !== column.title) onRename(column.id, title);
+    else setDraftTitle(column.title);
+  };
 
   return (
     <section
@@ -42,8 +55,10 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            onBlur={saveTitle}
+            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />

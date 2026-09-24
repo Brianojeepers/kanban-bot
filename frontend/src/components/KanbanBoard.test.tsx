@@ -24,13 +24,28 @@ describe("KanbanBoard", () => {
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
   });
 
-  it("renames a column", async () => {
+  it("renames a column once when editing finishes", async () => {
+    vi.mocked(renameColumn).mockClear();
     render(<KanbanBoard />);
     const column = getFirstColumn();
     const input = within(column).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "New Name");
+    expect(renameColumn).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Enter}");
+    expect(renameColumn).toHaveBeenCalledOnce();
+    expect(renameColumn).toHaveBeenCalledWith("col-backlog", "New Name");
     await waitFor(() => expect(input).toHaveValue("New Name"));
+  });
+
+  it("restores the saved title instead of saving an empty one", async () => {
+    vi.mocked(renameColumn).mockClear();
+    render(<KanbanBoard />);
+    const input = within(getFirstColumn()).getByLabelText("Column title");
+    await userEvent.clear(input);
+    await userEvent.tab();
+    expect(renameColumn).not.toHaveBeenCalled();
+    expect(input).toHaveValue("Backlog");
   });
 
   it("adds and removes a card", async () => {
@@ -63,7 +78,7 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard />);
     const input = within(getFirstColumn()).getByLabelText("Column title");
     await userEvent.clear(input);
-    await userEvent.type(input, "Ideas");
+    await userEvent.type(input, "Ideas{Enter}");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to rename column.");
   });
