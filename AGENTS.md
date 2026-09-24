@@ -58,9 +58,9 @@ Backend (`cd backend`, managed with `uv`):
 - Local server: `DATABASE_PATH=/tmp/pm.db SESSION_SECRET=dev uv run uvicorn app.main:app --reload`
 
 Frontend (`cd frontend`):
-- `npm run dev`, `npm run build` (static export to `out/`), `npm run lint`
+- `npm run dev` serves the UI on port 3000 and proxies `/api` to the backend on port 8000 (the Docker app or the local backend server); `npm run build` (static export to `out/`), `npm run lint`
 - `npm run test:unit` runs Vitest; add `-- src/lib/kanban.test.ts` to run one file or `-- -t "name"` to filter by test name.
-- `npm run test:e2e` runs Playwright. It starts `next dev` on port 3000 unless `PLAYWRIGHT_BASE_URL` is set (for example `http://localhost:8000` to test against the Docker app).
+- `npm run test:e2e` runs Playwright against the running Docker app at http://localhost:8000; set `PLAYWRIGHT_BASE_URL` to target another server, such as `http://localhost:3000` for `npm run dev`.
 - Frontend unit coverage must also be at least 80%.
 
 ## Architecture

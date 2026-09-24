@@ -30,9 +30,9 @@ This directory contains the Next.js Kanban app. It is statically exported (`outp
 
 ## Development
 
-- Run `npm run dev` for the Next.js development server.
+- Run `npm run dev` for the Next.js development server. It proxies `/api` to the backend on port 8000, which must be running.
 - Run `npm run lint` before completing frontend work.
-- Run `npm run test:unit` for Vitest, `npm run test:e2e` for Playwright, and `npm run test:all` for both.
+- Run `npm run test:unit` for Vitest, `npm run test:e2e` for Playwright (against the Docker app at http://localhost:8000 unless `PLAYWRIGHT_BASE_URL` is set), and `npm run test:all` for both.
 - Maintain at least 80% statement, branch, function, and line unit-test coverage. Cover critical board workflows in Playwright.
 
 ## API Boundary
