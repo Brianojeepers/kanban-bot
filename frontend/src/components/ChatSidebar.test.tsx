@@ -17,10 +17,11 @@ describe("ChatSidebar", () => {
     expect(screen.getByText("Help")).toHaveClass("self-end");
     expect(screen.getByText("Assistant is typing...")).toBeVisible();
     expect(screen.getByPlaceholderText("Ask about your board")).toHaveValue("");
-    reply({ ok: true, json: () => Promise.resolve({ messages: [{ role: "user", content: "Help" }, { role: "assistant", content: "Done" }] }) });
+    const board = { columns: [], cards: {} };
+    reply({ ok: true, json: () => Promise.resolve({ messages: [{ role: "user", content: "Help" }, { role: "assistant", content: "Done" }], board }) });
     expect(await screen.findByText("Done")).toHaveClass("self-start");
     expect(screen.queryByText("Assistant is typing...")).not.toBeInTheDocument();
-    expect(onBoardUpdated).toHaveBeenCalledOnce();
+    expect(onBoardUpdated).toHaveBeenCalledExactlyOnceWith(board);
   });
 
   it("keeps a message sent before the history finishes loading", async () => {

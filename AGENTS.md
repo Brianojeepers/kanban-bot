@@ -74,7 +74,7 @@ Backend (`backend/app/`):
 - `chat.py`: calls OpenRouter (`openai/gpt-oss-120b`) through `httpx` in JSON mode. It sends chat history plus the current board, then applies the returned `create_card`/`edit_card`/`move_card`/`delete_card` operations through the same `board.py` functions the HTTP routes use, and saves both messages. Tests mock `chat.httpx.post`.
 
 Frontend (`frontend/src/`):
-- `AuthGate` checks `/api/session`, shows the login form or the board, and places `KanbanBoard` next to `ChatSidebar`. After a chat reply changes the board, `AuthGate` bumps a `key` on `KanbanBoard` so it remounts and fetches the board again.
+- `AuthGate` checks `/api/session`, shows the login form or the board, and places `KanbanBoard` next to `ChatSidebar`. `AuthGate` holds the board state: `KanbanBoard` loads it and shows a loading state until it arrives, and a chat reply passes its returned board straight in, so the board updates in place.
 - `lib/api.ts` wraps the board endpoints. `lib/kanban.ts` holds the `BoardData` types and `getMoveTarget`, which turns a DnD Kit drop into the column and position sent to the move endpoint.
 - The board shape is `{ columns: [{id, title, cardIds}], cards: {id: {id, title, details}} }` on both backend and frontend.
 

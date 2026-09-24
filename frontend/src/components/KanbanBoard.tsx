@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -15,19 +15,22 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { getMoveTarget, initialData, type BoardData } from "@/lib/kanban";
+import { getMoveTarget, type BoardData } from "@/lib/kanban";
 import { addCard, deleteCard, getBoard, moveBoardCard, renameColumn, updateCard } from "@/lib/api";
 
-type KanbanBoardProps = { onLogout?: () => void };
+type KanbanBoardProps = {
+  board: BoardData | null;
+  onBoardChange: (board: BoardData) => void;
+  onLogout?: () => void;
+};
 
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps) => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getBoard().then(setBoard).catch(() => setError("Unable to load board."));
-  }, []);
+    getBoard().then(onBoardChange).catch(() => setError("Unable to load board."));
+  }, [onBoardChange]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -35,7 +38,18 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     })
   );
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
+  if (!board) {
+    return <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-6 text-sm text-[var(--gray-text)]">{error ? <p role="alert">{error}</p> : <p>Loading board...</p>}</main>;
+  }
+
+  const update = async (request: Promise<BoardData>, failure: string) => {
+    try {
+      onBoardChange(await request);
+      setError("");
+    } catch {
+      setError(failure);
+    }
+  };
 
   // Precise pointer hit-testing first (falls back to rect overlap), matching
   // dnd-kit's recommended strategy for nested column/card droppables.
@@ -48,36 +62,19 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     setActiveCardId(event.active.id as string);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
     const target = over && getMoveTarget(board.columns, String(active.id), String(over.id));
-    if (!target) return;
-
-    try {
-      setBoard(await moveBoardCard(String(active.id), target.columnId, target.position));
-    } catch {
-      setError("Unable to move card.");
-    }
+    if (target) update(moveBoardCard(String(active.id), target.columnId, target.position), "Unable to move card.");
   };
 
-  const handleRenameColumn = async (columnId: string, title: string) => {
-    try { setBoard(await renameColumn(columnId, title)); } catch { setError("Unable to rename column."); }
-  };
+  const handleRenameColumn = (columnId: string, title: string) => update(renameColumn(columnId, title), "Unable to rename column.");
+  const handleAddCard = (columnId: string, title: string, details: string) => update(addCard(columnId, title, details), "Unable to add card.");
+  const handleDeleteCard = (_columnId: string, cardId: string) => update(deleteCard(cardId), "Unable to delete card.");
+  const handleEditCard = (cardId: string, title: string, details: string) => update(updateCard(cardId, title, details), "Unable to edit card.");
 
-  const handleAddCard = async (columnId: string, title: string, details: string) => {
-    try { setBoard(await addCard(columnId, title, details)); } catch { setError("Unable to add card."); }
-  };
-
-  const handleDeleteCard = async (_columnId: string, cardId: string) => {
-    try { setBoard(await deleteCard(cardId)); } catch { setError("Unable to delete card."); }
-  };
-
-  const handleEditCard = async (cardId: string, title: string, details: string) => {
-    try { setBoard(await updateCard(cardId, title, details)); } catch { setError("Unable to edit card."); }
-  };
-
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
     <div className="relative overflow-hidden">

@@ -7,7 +7,7 @@ This directory contains the Next.js Kanban app. It is statically exported (`outp
 ## Structure
 
 - `src/app/page.tsx` renders `AuthGate` at `/`.
-- `src/components/AuthGate.tsx` checks the session, shows the sign-in form or the board with the chat sidebar, and remounts the board after chat updates.
+- `src/components/AuthGate.tsx` checks the session, shows the sign-in form or the board with the chat sidebar, and holds the board state that `KanbanBoard` and chat replies update.
 - `src/components/ChatSidebar.tsx` loads and sends chat messages through `/api/messages` and `/api/chat`.
 - `src/app/layout.tsx` defines metadata and the Manrope and Space Grotesk fonts.
 - `src/app/globals.css` defines the shared color variables and global styles.
@@ -17,7 +17,7 @@ This directory contains the Next.js Kanban app. It is statically exported (`outp
 - `src/components/KanbanCardPreview.tsx` renders the active drag overlay.
 - `src/components/NewCardForm.tsx` owns the add-card form's open, submit, validation, and cancel states.
 - `src/lib/api.ts` is the client API module for board reads and mutations.
-- `src/lib/kanban.ts` contains board types, initial placeholder data, and `getMoveTarget` for drag-and-drop drops.
+- `src/lib/kanban.ts` contains board types and `getMoveTarget` for drag-and-drop drops. Test board data lives in `src/test/fixtures.ts`.
 - `src/**/*.test.tsx` and `src/**/*.test.ts` are Vitest unit and component tests.
 - `tests/` contains Playwright browser integration tests.
 

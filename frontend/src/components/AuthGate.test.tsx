@@ -32,4 +32,11 @@ describe("AuthGate", () => {
     expect(await screen.findByLabelText("Username")).toBeVisible();
     expect(fetch).toHaveBeenCalledWith("/api/logout", { method: "POST" });
   });
+
+  it("shows the sign-in form with a message when the server cannot be reached", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")));
+    render(<AuthGate />);
+    expect(await screen.findByLabelText("Username")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to reach the server.");
+  });
 });

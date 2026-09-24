@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import type { BoardData } from "@/lib/kanban";
 
 type Message = { role: string; content: string };
-type ChatSidebarProps = { onBoardUpdated: () => void };
+type ChatSidebarProps = { onBoardUpdated: (board: BoardData) => void };
 
 export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -11,7 +12,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
   const [isSending, setIsSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { fetch("/api/messages").then((response) => response.ok ? response.json() : []).then((history: Message[]) => setMessages((current) => [...history, ...current])); }, []);
+  useEffect(() => { fetch("/api/messages").then((response) => response.ok ? response.json() : []).catch(() => []).then((history: Message[]) => setMessages((current) => [...history, ...current])); }, []);
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages, isSending]);
 
   const send = async (event: FormEvent<HTMLFormElement>) => {
@@ -32,7 +33,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
         throw new Error();
       }
       setMessages(result.messages);
-      onBoardUpdated();
+      onBoardUpdated(result.board);
     } catch {
       setMessages(history);
       (formElement.elements.namedItem("message") as HTMLTextAreaElement).value = message;
