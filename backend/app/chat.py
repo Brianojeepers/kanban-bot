@@ -6,6 +6,16 @@ import httpx
 from app import board
 
 
+SYSTEM_PROMPT = """You manage a Kanban board. Reply with a JSON object: {"response": "<message to the user>", "operations": [...]}.
+Each operation is a flat object using exactly one of these shapes, with ids taken from the board:
+{"action": "create_card", "column_id": "<column id>", "title": "<title>", "details": "<details>"}
+{"action": "edit_card", "card_id": "<card id>", "title": "<title>", "details": "<details>"}
+{"action": "move_card", "card_id": "<card id>", "column_id": "<column id>", "position": <0-based index in the destination column>}
+{"action": "delete_card", "card_id": "<card id>"}
+Use an empty operations array when the board should not change.
+Write the response as short plain text for a chat bubble: no Markdown, and refer to cards and columns by title, never by id."""
+
+
 def ask(message: str) -> dict:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
@@ -13,7 +23,7 @@ def ask(message: str) -> dict:
     payload = {
         "model": "openai/gpt-oss-120b",
         "messages": [
-            {"role": "system", "content": "Return JSON with response (string) and operations (array). Operations may be create_card, edit_card, move_card, or delete_card."},
+            {"role": "system", "content": SYSTEM_PROMPT},
             *board.messages(),
             {"role": "user", "content": f"Board: {json.dumps(board.board())}\nQuestion: {message}"},
         ],
