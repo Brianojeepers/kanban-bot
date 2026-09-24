@@ -1,5 +1,5 @@
 import type { Active, KeyboardCoordinateGetter, Over } from "@dnd-kit/core";
-import { boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type Column } from "@/lib/kanban";
+import { applyMove, boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type Column } from "@/lib/kanban";
 
 describe("getMoveTarget", () => {
   const columns: Column[] = [
@@ -104,5 +104,21 @@ describe("columnKeyboardCoordinates", () => {
 
   it("ignores other keys", () => {
     expect(move("KeyA", sideBySide, rect(10, 50, 80, 60))).toBeUndefined();
+  });
+});
+
+describe("applyMove", () => {
+  const board = {
+    columns: [{ id: "col-a", title: "A", cardIds: ["card-1", "card-2", "card-3"] }, { id: "col-b", title: "B", cardIds: ["card-4"] }],
+    cards: {},
+  };
+
+  it("moves a card into another column at a position", () => {
+    expect(applyMove(board, "card-2", "col-b", 0).columns.map((column) => column.cardIds)).toEqual([["card-1", "card-3"], ["card-2", "card-4"]]);
+  });
+
+  it("reorders within a column without changing the original board", () => {
+    expect(applyMove(board, "card-1", "col-a", 2).columns[0].cardIds).toEqual(["card-2", "card-3", "card-1"]);
+    expect(board.columns[0].cardIds).toEqual(["card-1", "card-2", "card-3"]);
   });
 });

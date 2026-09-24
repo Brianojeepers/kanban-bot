@@ -30,6 +30,16 @@ export const getMoveTarget = (columns: Column[], activeId: string, overId: strin
   return { columnId: targetColumn.id, position };
 };
 
+// The board after moving a card, applied locally so a drop shows at once while the API call runs.
+export const applyMove = (board: BoardData, cardId: string, columnId: string, position: number): BoardData => ({
+  ...board,
+  columns: board.columns.map((column) => {
+    const cardIds = column.cardIds.filter((id) => id !== cardId);
+    if (column.id === columnId) cardIds.splice(position, 0, cardId);
+    return { ...column, cardIds };
+  }),
+});
+
 // Screen reader announcements for drag and drop, using titles instead of the default internal ids.
 export const boardAnnouncements = (board: BoardData): Announcements => {
   const cardTitle = (id: string | number) => board.cards[String(id)]?.title ?? "card";

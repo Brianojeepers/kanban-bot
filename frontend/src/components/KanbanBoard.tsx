@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type BoardData } from "@/lib/kanban";
+import { applyMove, boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type BoardData } from "@/lib/kanban";
 import { addCard, deleteCard, getBoard, moveBoardCard, renameColumn, updateCard } from "@/lib/api";
 
 type KanbanBoardProps = {
@@ -44,11 +44,12 @@ export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps
     return <main className="mx-auto flex min-h-screen max-w-md items-center justify-center px-6 text-sm text-[var(--gray-text)]">{error ? <p role="alert">{error}</p> : <p>Loading board...</p>}</main>;
   }
 
-  const update = async (request: Promise<BoardData>, failure: string) => {
+  const update = async (request: Promise<BoardData>, failure: string, previous?: BoardData) => {
     try {
       onBoardChange(await request);
       setError("");
     } catch {
+      if (previous) onBoardChange(previous);
       setError(failure);
     }
   };
@@ -68,7 +69,9 @@ export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps
     const { active, over } = event;
     setActiveCardId(null);
     const target = over && getMoveTarget(board.columns, String(active.id), String(over.id));
-    if (target) update(moveBoardCard(String(active.id), target.columnId, target.position), "Unable to move card.");
+    if (!target) return;
+    onBoardChange(applyMove(board, String(active.id), target.columnId, target.position));
+    update(moveBoardCard(String(active.id), target.columnId, target.position), "Unable to move card.", board);
   };
 
   const handleRenameColumn = (columnId: string, title: string) => update(renameColumn(columnId, title), "Unable to rename column.");
@@ -143,11 +146,7 @@ export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps
             ))}
           </section>
           <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
+            {activeCard ? <KanbanCardPreview card={activeCard} /> : null}
           </DragOverlay>
         </DndContext>
       </main>
