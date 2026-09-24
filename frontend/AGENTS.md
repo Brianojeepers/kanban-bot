@@ -17,7 +17,7 @@ This directory contains the Next.js Kanban app. It is statically exported (`outp
 - `src/components/KanbanCardPreview.tsx` renders the active drag overlay.
 - `src/components/NewCardForm.tsx` owns the add-card form's open, submit, validation, and cancel states.
 - `src/lib/api.ts` is the client API module for board reads and mutations.
-- `src/lib/kanban.ts` contains board types, initial placeholder data, card-move logic, and ID creation.
+- `src/lib/kanban.ts` contains board types, initial placeholder data, and `getMoveTarget` for drag-and-drop drops.
 - `src/**/*.test.tsx` and `src/**/*.test.ts` are Vitest unit and component tests.
 - `tests/` contains Playwright browser integration tests.
 
@@ -25,7 +25,7 @@ This directory contains the Next.js Kanban app. It is statically exported (`outp
 
 - The board has exactly five ordered columns. Their titles can change; their count and order do not.
 - Cards contain a title and details. Cards can be added, edited, deleted, reordered, and moved; every change is persisted through the API.
-- `moveCard` is the source of truth for same-column ordering and cross-column insertion.
+- `getMoveTarget` decides where a dropped card lands: at the end of a column, or at the index of the card it is dropped on. The backend applies the move and returns the board.
 - The visual system uses the color variables in `globals.css`: yellow accent, blue primary, purple secondary, navy headings, and gray supporting text.
 
 ## Development

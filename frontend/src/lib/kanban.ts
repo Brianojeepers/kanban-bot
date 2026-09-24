@@ -71,98 +71,15 @@ export const initialData: BoardData = {
   },
 };
 
-const isColumnId = (columns: Column[], id: string) =>
-  columns.some((column) => column.id === id);
+// Where a dragged card lands: over a column it goes to the end, over a card it takes that
+// card's index among the column's other cards. Returns null when nothing would change.
+export const getMoveTarget = (columns: Column[], activeId: string, overId: string) => {
+  const sourceColumn = columns.find((column) => column.cardIds.includes(activeId));
+  const targetColumn = columns.find((column) => column.id === overId) ?? columns.find((column) => column.cardIds.includes(overId));
+  if (activeId === overId || !sourceColumn || !targetColumn) return null;
 
-const findColumnId = (columns: Column[], id: string) => {
-  if (isColumnId(columns, id)) {
-    return id;
-  }
-  return columns.find((column) => column.cardIds.includes(id))?.id;
-};
-
-export const moveCard = (
-  columns: Column[],
-  activeId: string,
-  overId: string
-): Column[] => {
-  const activeColumnId = findColumnId(columns, activeId);
-  const overColumnId = findColumnId(columns, overId);
-
-  if (!activeColumnId || !overColumnId) {
-    return columns;
-  }
-
-  const activeColumn = columns.find((column) => column.id === activeColumnId);
-  const overColumn = columns.find((column) => column.id === overColumnId);
-
-  if (!activeColumn || !overColumn) {
-    return columns;
-  }
-
-  const isOverColumn = isColumnId(columns, overId);
-
-  if (activeColumnId === overColumnId) {
-    if (isOverColumn) {
-      const nextCardIds = activeColumn.cardIds.filter(
-        (cardId) => cardId !== activeId
-      );
-      nextCardIds.push(activeId);
-      return columns.map((column) =>
-        column.id === activeColumnId
-          ? { ...column, cardIds: nextCardIds }
-          : column
-      );
-    }
-
-    const oldIndex = activeColumn.cardIds.indexOf(activeId);
-    const newIndex = activeColumn.cardIds.indexOf(overId);
-
-    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
-      return columns;
-    }
-
-    const nextCardIds = [...activeColumn.cardIds];
-    nextCardIds.splice(oldIndex, 1);
-    nextCardIds.splice(newIndex, 0, activeId);
-
-    return columns.map((column) =>
-      column.id === activeColumnId
-        ? { ...column, cardIds: nextCardIds }
-        : column
-    );
-  }
-
-  const activeIndex = activeColumn.cardIds.indexOf(activeId);
-  if (activeIndex === -1) {
-    return columns;
-  }
-
-  const nextActiveCardIds = [...activeColumn.cardIds];
-  nextActiveCardIds.splice(activeIndex, 1);
-
-  const nextOverCardIds = [...overColumn.cardIds];
-  if (isOverColumn) {
-    nextOverCardIds.push(activeId);
-  } else {
-    const overIndex = overColumn.cardIds.indexOf(overId);
-    const insertIndex = overIndex === -1 ? nextOverCardIds.length : overIndex;
-    nextOverCardIds.splice(insertIndex, 0, activeId);
-  }
-
-  return columns.map((column) => {
-    if (column.id === activeColumnId) {
-      return { ...column, cardIds: nextActiveCardIds };
-    }
-    if (column.id === overColumnId) {
-      return { ...column, cardIds: nextOverCardIds };
-    }
-    return column;
-  });
-};
-
-export const createId = (prefix: string) => {
-  const randomPart = Math.random().toString(36).slice(2, 8);
-  const timePart = Date.now().toString(36);
-  return `${prefix}-${randomPart}${timePart}`;
+  const remainingCardIds = targetColumn.cardIds.filter((cardId) => cardId !== activeId);
+  const position = targetColumn.id === overId ? remainingCardIds.length : remainingCardIds.indexOf(overId);
+  if (targetColumn.id === sourceColumn.id && sourceColumn.cardIds.indexOf(activeId) === position) return null;
+  return { columnId: targetColumn.id, position };
 };

@@ -26,4 +26,13 @@ describe("NewCardForm", () => {
 
     expect(screen.getByPlaceholderText("Card title")).toHaveValue("");
   });
+
+  it("does not submit a blank title", async () => {
+    const onAdd = vi.fn();
+    render(<NewCardForm onAdd={onAdd} />);
+    await userEvent.click(screen.getByRole("button", { name: /add a card/i }));
+    await userEvent.type(screen.getByPlaceholderText("Card title"), "   ");
+    await userEvent.click(screen.getByRole("button", { name: /add card/i }));
+    expect(onAdd).not.toHaveBeenCalled();
+  });
 });

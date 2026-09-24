@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { initialData, type BoardData } from "@/lib/kanban";
+import { getMoveTarget, initialData, type BoardData } from "@/lib/kanban";
 import { addCard, deleteCard, getBoard, moveBoardCard, renameColumn, updateCard } from "@/lib/api";
 
 type KanbanBoardProps = { onLogout?: () => void };
@@ -51,27 +51,11 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
-
-    if (!over || active.id === over.id) return;
-
-    const activeId = active.id as string;
-    const overId = String(over.id);
-    const sourceColumn = board.columns.find((column) => column.cardIds.includes(activeId));
-    if (!sourceColumn) return;
-
-    const isOverColumn = board.columns.some((column) => column.id === overId);
-    const targetColumn = isOverColumn
-      ? board.columns.find((column) => column.id === overId)
-      : board.columns.find((column) => column.cardIds.includes(overId));
-    if (!targetColumn) return;
-
-    const remainingCardIds = targetColumn.cardIds.filter((cardId) => cardId !== activeId);
-    const position = isOverColumn ? remainingCardIds.length : remainingCardIds.indexOf(overId);
-
-    if (targetColumn.id === sourceColumn.id && sourceColumn.cardIds.indexOf(activeId) === position) return;
+    const target = over && getMoveTarget(board.columns, String(active.id), String(over.id));
+    if (!target) return;
 
     try {
-      setBoard(await moveBoardCard(activeId, targetColumn.id, position === -1 ? remainingCardIds.length : position));
+      setBoard(await moveBoardCard(String(active.id), target.columnId, target.position));
     } catch {
       setError("Unable to move card.");
     }

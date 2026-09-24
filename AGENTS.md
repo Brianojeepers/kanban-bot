@@ -75,7 +75,7 @@ Backend (`backend/app/`):
 
 Frontend (`frontend/src/`):
 - `AuthGate` checks `/api/session`, shows the login form or the board, and places `KanbanBoard` next to `ChatSidebar`. After a chat reply changes the board, `AuthGate` bumps a `key` on `KanbanBoard` so it remounts and fetches the board again.
-- `lib/api.ts` wraps the board endpoints. `lib/kanban.ts` holds the `BoardData` types and the client-side `moveCard` logic used during drag and drop with DnD Kit.
+- `lib/api.ts` wraps the board endpoints. `lib/kanban.ts` holds the `BoardData` types and `getMoveTarget`, which turns a DnD Kit drop into the column and position sent to the move endpoint.
 - The board shape is `{ columns: [{id, title, cardIds}], cards: {id: {id, title, details}} }` on both backend and frontend.
 
 `backend/AGENTS.md`, `frontend/AGENTS.md`, and `scripts/AGENTS.md` contain per-directory rules.

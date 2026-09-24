@@ -66,4 +66,10 @@ describe("ChatSidebar", () => {
     expect(screen.getByPlaceholderText("Ask about your board")).toHaveValue("Help");
     expect(screen.queryByText("Help", { selector: "p" })).not.toBeInTheDocument();
   });
+
+  it("starts with an empty chat when history cannot be loaded", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false }));
+    render(<ChatSidebar onBoardUpdated={vi.fn()} />);
+    expect(await screen.findByText(/Ask the assistant/)).toBeVisible();
+  });
 });
