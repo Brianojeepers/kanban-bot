@@ -50,7 +50,7 @@ class Reply(BaseModel):
     operations: list[Annotated[CreateCard | EditCard | MoveCard | DeleteCard, Field(discriminator="action")]] = []
 
 
-def ask(message: str) -> dict:
+def ask(username: str, message: str) -> dict:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise ValueError("OPENROUTER_API_KEY is not configured")
@@ -58,8 +58,8 @@ def ask(message: str) -> dict:
         "model": "openai/gpt-oss-120b",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            *board.messages(),
-            {"role": "user", "content": f"Board: {json.dumps(board.board())}\nQuestion: {message}"},
+            *board.messages(username),
+            {"role": "user", "content": f"Board: {json.dumps(board.board(username))}\nQuestion: {message}"},
         ],
         "response_format": {"type": "json_object"},
     }
@@ -77,12 +77,12 @@ def ask(message: str) -> dict:
         with board.connection() as database:
             for operation in reply.operations:
                 match operation:
-                    case CreateCard(): board.create_card(database, operation.column_id, operation.title, operation.details)
-                    case EditCard(): board.update_card(database, operation.card_id, operation.title, operation.details)
-                    case MoveCard(): board.move_card(database, operation.card_id, operation.column_id, operation.position)
-                    case DeleteCard(): board.delete_card(database, operation.card_id)
+                    case CreateCard(): board.create_card(database, username, operation.column_id, operation.title, operation.details)
+                    case EditCard(): board.update_card(database, username, operation.card_id, operation.title, operation.details)
+                    case MoveCard(): board.move_card(database, username, operation.card_id, operation.column_id, operation.position)
+                    case DeleteCard(): board.delete_card(database, username, operation.card_id)
     except board.NotFoundError as error:
         raise ValueError("The AI referred to a card or column that does not exist. Please try again.") from error
-    board.add_message("user", message)
-    board.add_message("assistant", reply.response)
-    return {"response": reply.response, "board": board.board(), "messages": board.messages()}
+    board.add_message(username, "user", message)
+    board.add_message(username, "assistant", reply.response)
+    return {"response": reply.response, "board": board.board(username), "messages": board.messages(username)}

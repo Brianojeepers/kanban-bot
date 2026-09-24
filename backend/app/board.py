@@ -74,10 +74,29 @@ def initialize() -> None:
             database.execute("PRAGMA user_version = 1")
 
 
-def board() -> dict:
+def _board_id(database: sqlite3.Connection, username: str) -> int:
+    return database.execute("SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = ?", (username,)).fetchone()["id"]
+
+
+def _require_column(database: sqlite3.Connection, username: str, column_id: str) -> None:
+    if not database.execute("SELECT 1 FROM columns WHERE id = ? AND board_id = ?", (column_id, _board_id(database, username))).fetchone():
+        raise NotFoundError(f"Column {column_id} does not exist")
+
+
+def _require_card(database: sqlite3.Connection, username: str, card_id: str) -> sqlite3.Row:
+    card = database.execute(
+        "SELECT cards.column_id, cards.title, cards.details, cards.position FROM cards JOIN columns ON columns.id = cards.column_id WHERE cards.id = ? AND columns.board_id = ?",
+        (card_id, _board_id(database, username)),
+    ).fetchone()
+    if not card:
+        raise NotFoundError(f"Card {card_id} does not exist")
+    return card
+
+
+def board(username: str) -> dict:
     initialize()
     with connection() as database:
-        board_id = database.execute("SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = 'user'").fetchone()["id"]
+        board_id = _board_id(database, username)
         columns = [dict(row) for row in database.execute("SELECT id, title FROM columns WHERE board_id = ? ORDER BY position", (board_id,))]
         cards = {row["id"]: {"id": row["id"], "title": row["title"], "details": row["details"]} for row in database.execute("SELECT cards.* FROM cards JOIN columns ON columns.id = cards.column_id WHERE columns.board_id = ? ORDER BY cards.position", (board_id,))}
         for column in columns:
@@ -85,37 +104,31 @@ def board() -> dict:
         return {"columns": columns, "cards": cards}
 
 
-def rename_column(database: sqlite3.Connection, column_id: str, title: str) -> None:
-    if database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id)).rowcount == 0:
-        raise NotFoundError(f"Column {column_id} does not exist")
+def rename_column(database: sqlite3.Connection, username: str, column_id: str, title: str) -> None:
+    _require_column(database, username, column_id)
+    database.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
 
 
-def create_card(database: sqlite3.Connection, column_id: str, title: str, details: str) -> None:
-    if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
-        raise NotFoundError(f"Column {column_id} does not exist")
+def create_card(database: sqlite3.Connection, username: str, column_id: str, title: str, details: str) -> None:
+    _require_column(database, username, column_id)
     position = database.execute("SELECT COUNT(*) FROM cards WHERE column_id = ?", (column_id,)).fetchone()[0]
     database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (f"card-{uuid4().hex}", column_id, title, details or "No details yet.", position))
 
 
-def update_card(database: sqlite3.Connection, card_id: str, title: str, details: str) -> None:
-    if database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id)).rowcount == 0:
-        raise NotFoundError(f"Card {card_id} does not exist")
+def update_card(database: sqlite3.Connection, username: str, card_id: str, title: str, details: str) -> None:
+    _require_card(database, username, card_id)
+    database.execute("UPDATE cards SET title = ?, details = ? WHERE id = ?", (title, details, card_id))
 
 
-def delete_card(database: sqlite3.Connection, card_id: str) -> None:
-    card = database.execute("SELECT column_id, position FROM cards WHERE id = ?", (card_id,)).fetchone()
-    if not card:
-        raise NotFoundError(f"Card {card_id} does not exist")
+def delete_card(database: sqlite3.Connection, username: str, card_id: str) -> None:
+    card = _require_card(database, username, card_id)
     database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
     database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (card["column_id"], card["position"]))
 
 
-def move_card(database: sqlite3.Connection, card_id: str, column_id: str, position: int) -> None:
-    card = database.execute("SELECT column_id, title, details, position FROM cards WHERE id = ?", (card_id,)).fetchone()
-    if not card:
-        raise NotFoundError(f"Card {card_id} does not exist")
-    if not database.execute("SELECT 1 FROM columns WHERE id = ?", (column_id,)).fetchone():
-        raise NotFoundError(f"Column {column_id} does not exist")
+def move_card(database: sqlite3.Connection, username: str, card_id: str, column_id: str, position: int) -> None:
+    card = _require_card(database, username, card_id)
+    _require_column(database, username, column_id)
 
     source_column_id = card["column_id"]
     database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (source_column_id, card["position"]))
@@ -126,15 +139,14 @@ def move_card(database: sqlite3.Connection, card_id: str, column_id: str, positi
     database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)", (card_id, column_id, card["title"], card["details"], destination_position))
 
 
-def messages() -> list[dict[str, str]]:
+def messages(username: str) -> list[dict[str, str]]:
     initialize()
     with connection() as database:
-        rows = database.execute("SELECT role, content FROM messages ORDER BY created_at, id").fetchall()
+        rows = database.execute("SELECT role, content FROM messages WHERE board_id = ? ORDER BY created_at, id", (_board_id(database, username),)).fetchall()
     return [dict(row) for row in rows]
 
 
-def add_message(role: str, content: str) -> None:
+def add_message(username: str, role: str, content: str) -> None:
     initialize()
     with connection() as database:
-        board_id = database.execute("SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = 'user'").fetchone()["id"]
-        database.execute("INSERT INTO messages (board_id, role, content) VALUES (?, ?, ?)", (board_id, role, content))
+        database.execute("INSERT INTO messages (board_id, role, content) VALUES (?, ?, ?)", (_board_id(database, username), role, content))

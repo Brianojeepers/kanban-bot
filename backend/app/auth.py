@@ -19,8 +19,10 @@ def create_session(username: str) -> str:
     return f"{username}.{_signature(username)}"
 
 
-def is_valid_session(token: str | None) -> bool:
+def session_username(token: str | None) -> str | None:
     if not token or "." not in token:
-        return False
+        return None
     username, signature = token.split(".", maxsplit=1)
-    return username == USERNAME and hmac.compare_digest(signature, _signature(username))
+    if username == USERNAME and hmac.compare_digest(signature, _signature(username)):
+        return username
+    return None

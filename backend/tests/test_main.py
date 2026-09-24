@@ -353,3 +353,67 @@ def test_titles_are_saved_trimmed() -> None:
     updated = board_client.patch("/api/columns/col-done", json={"title": "  Shipped  "}).json()
 
     assert updated["columns"][4]["title"] == "Shipped"
+
+
+def add_other_users_board() -> None:
+    with board.connection() as database:
+        user_id = database.execute("INSERT INTO users (username) VALUES ('other')").lastrowid
+        board_id = database.execute("INSERT INTO boards (user_id) VALUES (?)", (user_id,)).lastrowid
+        database.execute("INSERT INTO columns (id, board_id, title, position) VALUES ('other-col', ?, 'Theirs', 0)", (board_id,))
+        database.execute("INSERT INTO cards (id, column_id, title, details, position) VALUES ('other-card', 'other-col', 'Private', 'Secret', 0)")
+        database.execute("INSERT INTO messages (board_id, role, content) VALUES (?, 'user', 'Their message')", (board_id,))
+
+
+def other_users_rows() -> tuple:
+    with board.connection() as database:
+        return (
+            [tuple(row) for row in database.execute("SELECT * FROM columns WHERE id = 'other-col'")],
+            [tuple(row) for row in database.execute("SELECT * FROM cards WHERE id = 'other-card'")],
+        )
+
+
+def test_signed_in_user_cannot_see_another_users_board_or_messages() -> None:
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    add_other_users_board()
+
+    own_board = board_client.get("/api/board").json()
+    assert "other-card" not in own_board["cards"]
+    assert "other-col" not in [column["id"] for column in own_board["columns"]]
+    assert board_client.get("/api/messages").json() == []
+
+
+@pytest.mark.parametrize(("method", "path", "body"), [
+    ("patch", "/api/columns/other-col", {"title": "Mine now"}),
+    ("post", "/api/columns/other-col/cards", {"title": "Planted"}),
+    ("patch", "/api/cards/other-card", {"title": "Changed"}),
+    ("delete", "/api/cards/other-card", None),
+    ("post", "/api/cards/other-card/move", {"column_id": "col-done", "position": 0}),
+    ("post", "/api/cards/card-1/move", {"column_id": "other-col", "position": 0}),
+])
+def test_signed_in_user_cannot_change_another_users_board(method, path, body) -> None:
+    board_client = signed_in_client()
+    own_before = board_client.get("/api/board").json()
+    add_other_users_board()
+    other_before = other_users_rows()
+
+    assert board_client.request(method.upper(), path, json=body).status_code == 404
+    assert other_users_rows() == other_before
+    assert board_client.get("/api/board").json() == own_before
+
+
+def test_ai_cannot_change_another_users_board(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    add_other_users_board()
+    other_before = other_users_rows()
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps({"response": "Done", "operations": [{"action": "delete_card", "card_id": "other-card"}]})}}]}
+
+    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+
+    assert board_client.post("/api/chat", json={"message": "Delete other-card"}).status_code == 502
+    assert other_users_rows() == other_before

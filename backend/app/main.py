@@ -1,11 +1,12 @@
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.auth import COOKIE_NAME, PASSWORD, USERNAME, create_session, is_valid_session
+from app.auth import COOKIE_NAME, PASSWORD, USERNAME, create_session, session_username
 from app import board
 from app import chat
 
@@ -38,9 +39,14 @@ class ChatRequest(BaseModel):
     message: str
 
 
-def require_session(pm_session: str | None = Cookie(default=None)) -> None:
-    if not is_valid_session(pm_session):
+def require_session(pm_session: str | None = Cookie(default=None)) -> str:
+    username = session_username(pm_session)
+    if not username:
         raise HTTPException(status_code=401, detail="Not signed in")
+    return username
+
+
+SignedInUser = Annotated[str, Depends(require_session)]
 
 
 @app.exception_handler(board.NotFoundError)
@@ -62,9 +68,8 @@ def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
 
 
 @app.get("/api/session")
-def session(pm_session: str | None = Cookie(default=None)) -> dict[str, str]:
-    require_session(pm_session)
-    return {"username": USERNAME}
+def session(username: SignedInUser) -> dict[str, str]:
+    return {"username": username}
 
 
 @app.post("/api/logout")
@@ -73,55 +78,55 @@ def logout(response: Response) -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/board", dependencies=[Depends(require_session)])
-def get_board() -> dict:
-    return board.board()
+@app.get("/api/board")
+def get_board(username: SignedInUser) -> dict:
+    return board.board(username)
 
 
-@app.patch("/api/columns/{column_id}", dependencies=[Depends(require_session)])
-def rename_board_column(column_id: str, payload: ColumnRequest) -> dict:
+@app.patch("/api/columns/{column_id}")
+def rename_board_column(username: SignedInUser, column_id: str, payload: ColumnRequest) -> dict:
     with board.connection() as database:
-        board.rename_column(database, column_id, payload.title)
-    return board.board()
+        board.rename_column(database, username, column_id, payload.title)
+    return board.board(username)
 
 
-@app.post("/api/columns/{column_id}/cards", dependencies=[Depends(require_session)])
-def add_board_card(column_id: str, payload: CardRequest) -> dict:
+@app.post("/api/columns/{column_id}/cards")
+def add_board_card(username: SignedInUser, column_id: str, payload: CardRequest) -> dict:
     with board.connection() as database:
-        board.create_card(database, column_id, payload.title, payload.details)
-    return board.board()
+        board.create_card(database, username, column_id, payload.title, payload.details)
+    return board.board(username)
 
 
-@app.patch("/api/cards/{card_id}", dependencies=[Depends(require_session)])
-def edit_board_card(card_id: str, payload: CardRequest) -> dict:
+@app.patch("/api/cards/{card_id}")
+def edit_board_card(username: SignedInUser, card_id: str, payload: CardRequest) -> dict:
     with board.connection() as database:
-        board.update_card(database, card_id, payload.title, payload.details)
-    return board.board()
+        board.update_card(database, username, card_id, payload.title, payload.details)
+    return board.board(username)
 
 
-@app.delete("/api/cards/{card_id}", dependencies=[Depends(require_session)])
-def remove_board_card(card_id: str) -> dict:
+@app.delete("/api/cards/{card_id}")
+def remove_board_card(username: SignedInUser, card_id: str) -> dict:
     with board.connection() as database:
-        board.delete_card(database, card_id)
-    return board.board()
+        board.delete_card(database, username, card_id)
+    return board.board(username)
 
 
-@app.post("/api/cards/{card_id}/move", dependencies=[Depends(require_session)])
-def move_board_card(card_id: str, payload: MoveRequest) -> dict:
+@app.post("/api/cards/{card_id}/move")
+def move_board_card(username: SignedInUser, card_id: str, payload: MoveRequest) -> dict:
     with board.connection() as database:
-        board.move_card(database, card_id, payload.column_id, payload.position)
-    return board.board()
+        board.move_card(database, username, card_id, payload.column_id, payload.position)
+    return board.board(username)
 
 
-@app.get("/api/messages", dependencies=[Depends(require_session)])
-def get_messages() -> list[dict[str, str]]:
-    return board.messages()
+@app.get("/api/messages")
+def get_messages(username: SignedInUser) -> list[dict[str, str]]:
+    return board.messages(username)
 
 
-@app.post("/api/chat", dependencies=[Depends(require_session)])
-def send_chat(payload: ChatRequest) -> dict:
+@app.post("/api/chat")
+def send_chat(username: SignedInUser, payload: ChatRequest) -> dict:
     try:
-        return chat.ask(payload.message)
+        return chat.ask(username, payload.message)
     except ValueError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
 

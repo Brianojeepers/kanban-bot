@@ -68,9 +68,9 @@ Frontend (`cd frontend`):
 The app is one Docker image. A Node stage builds the Next.js app with `output: "export"`. That output is copied into `/app/static` of a Python `uv` image, where FastAPI serves both `/api/*` and the static site from the same origin. `backend/static/index.html` in the repo is only the old smoke-test page; the Docker build replaces it. There is no separate API host or CORS.
 
 Backend (`backend/app/`):
-- `main.py`: thin route handlers. The `require_session` dependency protects every board and chat endpoint. Every mutation endpoint returns the full updated board.
+- `main.py`: thin route handlers. The `require_session` dependency protects every board and chat endpoint and passes the signed-in username to it. Every mutation endpoint returns the full updated board.
 - `auth.py`: fixed `user`/`password` login and an HMAC-signed, HTTP-only `pm_session` cookie. The signing key comes from `SESSION_SECRET`; the app refuses to start without it.
-- `board.py`: SQLite access with raw `sqlite3`. `initialize()` creates the tables and seeds the user, the five columns, and the demo cards; it runs on each read. Cards keep an explicit `position` within each column, and `move_card` shifts positions in both the source and destination columns. The schema supports multiple users (see `docs/database-schema.json`), but queries are currently hardcoded to the `user` account.
+- `board.py`: SQLite access with raw `sqlite3`. `initialize()` creates the tables and seeds the user, the five columns, and the demo cards; it runs on each read. Cards keep an explicit `position` within each column, and `move_card` shifts positions in both the source and destination columns. Every function takes the username and only reads or changes that user's board; ids from another board are reported as not found. The schema supports multiple users (see `docs/database-schema.json`), but the seed uses fixed column and card ids, so seeding must generate per-board ids before a second account is added.
 - `chat.py`: calls OpenRouter (`openai/gpt-oss-120b`) through `httpx` in JSON mode. It sends chat history plus the current board, then applies the returned `create_card`/`edit_card`/`move_card`/`delete_card` operations through the same `board.py` functions the HTTP routes use, and saves both messages. Tests mock `chat.httpx.post`.
 
 Frontend (`frontend/src/`):
