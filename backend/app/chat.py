@@ -17,6 +17,9 @@ Each operation is a flat object using exactly one of these shapes, with ids take
 Use an empty operations array when the board should not change.
 A card created in this reply has no id yet, so never edit, move or delete it in the same reply; create it with its final title, details and column instead.
 Write the response as short plain text for a chat bubble: no Markdown, and refer to cards and columns by title, never by id."""
+# Only recent turns are sent: the board snapshot already carries the current state, and the
+# full history would grow the cost of every request until it exceeded the model's context.
+HISTORY_LIMIT = 20
 
 
 class CreateCard(BaseModel):
@@ -58,7 +61,7 @@ def ask(username: str, message: str) -> dict:
         "model": "openai/gpt-oss-120b",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            *board.messages(username),
+            *board.messages(username)[-HISTORY_LIMIT:],
             {"role": "user", "content": f"Board: {json.dumps(board.board(username))}\nQuestion: {message}"},
         ],
         "response_format": {"type": "json_object"},

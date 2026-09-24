@@ -417,3 +417,29 @@ def test_ai_cannot_change_another_users_board(monkeypatch) -> None:
 
     assert board_client.post("/api/chat", json={"message": "Delete other-card"}).status_code == 502
     assert other_users_rows() == other_before
+
+
+def test_chat_sends_only_recent_history_to_the_model(monkeypatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    for number in range(30):
+        board.add_message("user", "user", f"Old message {number}")
+    sent = {}
+
+    class Response:
+        def raise_for_status(self) -> None: pass
+        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
+
+    def capture(*args, **kwargs):
+        sent.update(kwargs["json"])
+        return Response()
+
+    monkeypatch.setattr(chat.httpx, "post", capture)
+    board_client.post("/api/chat", json={"message": "Latest"})
+
+    history = sent["messages"][1:-1]
+    assert len(history) == chat.HISTORY_LIMIT
+    assert history[0]["content"] == "Old message 10"
+    assert history[-1]["content"] == "Old message 29"
+    assert sent["messages"][-1]["content"].endswith("Question: Latest")
