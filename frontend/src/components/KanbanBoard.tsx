@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   pointerWithin,
   rectIntersection,
@@ -15,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { getMoveTarget, type BoardData } from "@/lib/kanban";
+import { boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type BoardData } from "@/lib/kanban";
 import { addCard, deleteCard, getBoard, moveBoardCard, renameColumn, updateCard } from "@/lib/api";
 
 type KanbanBoardProps = {
@@ -35,7 +36,8 @@ export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    })
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: columnKeyboardCoordinates })
   );
 
   if (!board) {
@@ -123,6 +125,7 @@ export const KanbanBoard = ({ board, onBoardChange, onLogout }: KanbanBoardProps
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
+          accessibility={{ announcements: boardAnnouncements(board) }}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >

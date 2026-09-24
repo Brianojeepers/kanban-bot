@@ -12,7 +12,7 @@ type KanbanCardProps = {
 
 export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
   const style = {
@@ -29,8 +29,6 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
-      {...attributes}
-      {...listeners}
       data-testid={`card-${card.id}`}
     >
       {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
@@ -39,7 +37,17 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
       <p className="mt-2 break-words text-sm leading-6 text-[var(--gray-text)]">
         {card.details}
       </p></>}
-      <div className="mt-3 flex items-center justify-end gap-2">
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          aria-label={`Move ${card.title}`}
+          className="mr-auto cursor-grab touch-none rounded-full px-2 py-1 text-xs font-semibold text-[var(--gray-text)] hover:text-[var(--navy-dark)] active:cursor-grabbing"
+        >
+          Move
+        </button>
         {!isEditing && <button
           type="button"
           onClick={() => setIsEditing(true)}

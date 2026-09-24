@@ -23,7 +23,7 @@ export const KanbanColumn = ({
   onDeleteCard,
   onEditCard,
 }: KanbanColumnProps) => {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef, isOver } = useDroppable({ id: column.id, data: { type: "column" } });
   const [draftTitle, setDraftTitle] = useState(column.title);
   const [savedTitle, setSavedTitle] = useState(column.title);
   if (column.title !== savedTitle) {

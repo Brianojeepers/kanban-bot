@@ -14,3 +14,8 @@ it("edits a card through its save action", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Save" }));
   expect(onEdit).toHaveBeenCalledWith("card-1", "Ship", "Notes");
 });
+it("uses a labelled move handle so the card itself is not a button", () => {
+  render(<KanbanCard card={{ id: "card-1", title: "Draft", details: "Notes" }} onDelete={vi.fn()} onEdit={vi.fn()} />);
+  expect(screen.getByTestId("card-card-1")).not.toHaveAttribute("role");
+  expect(screen.getByRole("button", { name: "Move Draft" })).toBeVisible();
+});

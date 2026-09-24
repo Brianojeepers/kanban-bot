@@ -1,4 +1,5 @@
-import { getMoveTarget, type Column } from "@/lib/kanban";
+import type { Active, KeyboardCoordinateGetter, Over } from "@dnd-kit/core";
+import { boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type Column } from "@/lib/kanban";
 
 describe("getMoveTarget", () => {
   const columns: Column[] = [
@@ -30,5 +31,78 @@ describe("getMoveTarget", () => {
   it("returns null for unknown ids", () => {
     expect(getMoveTarget(columns, "missing", "card-1")).toBeNull();
     expect(getMoveTarget(columns, "card-1", "missing")).toBeNull();
+  });
+});
+
+describe("boardAnnouncements", () => {
+  const announcements = boardAnnouncements({
+    columns: [{ id: "col-a", title: "Backlog", cardIds: ["card-1"] }, { id: "col-b", title: "Review", cardIds: ["card-2"] }],
+    cards: { "card-1": { id: "card-1", title: "Draft", details: "" }, "card-2": { id: "card-2", title: "Other", details: "" } },
+  });
+  const active = { id: "card-1" } as Active;
+  const over = (id: string) => ({ id }) as Over;
+
+  it("announces cards and columns by title", () => {
+    expect(announcements.onDragStart({ active })).toBe("Picked up Draft.");
+    expect(announcements.onDragOver({ active, over: over("col-b") })).toBe("Draft is over Review.");
+    expect(announcements.onDragOver({ active, over: over("card-2") })).toBe("Draft is over Review.");
+    expect(announcements.onDragEnd({ active, over: over("col-b") })).toBe("Dropped Draft in Review.");
+    expect(announcements.onDragCancel({ active, over: null })).toBe("Cancelled moving Draft.");
+  });
+
+  it("covers drops outside a column and unknown ids", () => {
+    expect(announcements.onDragOver({ active, over: null })).toBe("Draft is not over a column.");
+    expect(announcements.onDragEnd({ active, over: null })).toBe("Dropped Draft.");
+    expect(announcements.onDragStart({ active: { id: "missing" } as Active })).toBe("Picked up card.");
+    expect(announcements.onDragOver({ active, over: over("missing") })).toBe("Draft is over column.");
+  });
+});
+
+describe("columnKeyboardCoordinates", () => {
+  const rect = (left: number, top: number, width = 100, height = 400) => ({ left, top, width, height, right: left + width, bottom: top + height });
+  type Rect = ReturnType<typeof rect>;
+  const move = (code: string, columns: Rect[], collisionRect: Rect, cards: [string, Rect][] = []) =>
+    columnKeyboardCoordinates({ code, preventDefault: vi.fn() } as unknown as KeyboardEvent, {
+      active: "card-active",
+      currentCoordinates: { x: collisionRect.left, y: collisionRect.top },
+      context: {
+        collisionRect,
+        droppableRects: new Map<string, Rect>([...columns.map((column, index) => [`col-${index}`, column] as [string, Rect]), ...cards]),
+        droppableContainers: { getEnabled: () => [
+          ...columns.map((_, index) => ({ id: `col-${index}`, data: { current: { type: "column" } } })),
+          ...cards.map(([id]) => ({ id, data: { current: {} } })),
+        ] },
+      },
+    } as unknown as Parameters<KeyboardCoordinateGetter>[1]);
+  const sideBySide = [rect(0, 0), rect(120, 0), rect(240, 0)];
+
+  it("moves to the adjacent column on Left and Right, keeping the height", () => {
+    expect(move("ArrowRight", sideBySide, rect(10, 50, 80, 60))).toEqual({ x: 130, y: 50 });
+    expect(move("ArrowLeft", sideBySide, rect(130, 50, 80, 60))).toEqual({ x: 10, y: 50 });
+  });
+
+  it("does not move past the first or last column, or from outside a column", () => {
+    expect(move("ArrowLeft", sideBySide, rect(10, 50, 80, 60))).toBeUndefined();
+    expect(move("ArrowRight", sideBySide, rect(250, 50, 80, 60))).toBeUndefined();
+    expect(move("ArrowRight", sideBySide, rect(1000, 50, 80, 60))).toBeUndefined();
+  });
+
+  it("places the card inside the next column when columns are stacked", () => {
+    const stacked = [rect(0, 0, 300, 400), rect(0, 420, 300, 400)];
+    expect(move("ArrowRight", stacked, rect(10, 100, 280, 60))).toEqual({ x: 10, y: 420 });
+  });
+
+  it("moves Up and Down past the neighbouring card in the same column only", () => {
+    const cards: [string, Rect][] = [
+      ["card-a", rect(10, 20, 80, 60)], ["card-b", rect(10, 100, 80, 60)], ["card-c", rect(10, 180, 80, 60)],
+      ["card-other-column", rect(130, 60, 80, 60)], ["card-active", rect(10, 100, 80, 60)],
+    ];
+    expect(move("ArrowUp", sideBySide, rect(10, 100, 80, 60), cards)).toEqual({ x: 10, y: 20 });
+    expect(move("ArrowDown", sideBySide, rect(10, 100, 80, 60), cards)).toEqual({ x: 10, y: 180 });
+    expect(move("ArrowUp", sideBySide, rect(10, 20, 80, 60), cards)).toBeUndefined();
+  });
+
+  it("ignores other keys", () => {
+    expect(move("KeyA", sideBySide, rect(10, 50, 80, 60))).toBeUndefined();
   });
 });

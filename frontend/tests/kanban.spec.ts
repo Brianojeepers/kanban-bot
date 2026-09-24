@@ -9,7 +9,7 @@ const signIn = async (page: import("@playwright/test").Page) => {
 test.afterEach(async ({ page }) => {
   const board = await (await page.request.get("/api/board")).json();
   for (const card of Object.values(board.cards) as { id: string; title: string }[]) {
-    if (/^(Playwright card|Drag card|Adjacent move) \d+$/.test(card.title)) await page.request.delete(`/api/cards/${card.id}`);
+    if (/^(Playwright card|Drag card|Adjacent move|Keyboard move) \d+$/.test(card.title)) await page.request.delete(`/api/cards/${card.id}`);
   }
 });
 
@@ -44,7 +44,7 @@ test("moves a card between columns", async ({ page }) => {
   const targetColumn = page.getByTestId("column-col-review");
   await card.scrollIntoViewIfNeeded();
   await targetColumn.scrollIntoViewIfNeeded();
-  const cardBox = await card.boundingBox();
+  const cardBox = await card.getByRole("button", { name: `Move ${title}` }).boundingBox();
   const columnBox = await targetColumn.boundingBox();
   if (!cardBox || !columnBox) {
     throw new Error("Unable to resolve drag coordinates.");
@@ -81,7 +81,7 @@ test("moves a card from Backlog to Discovery and back without duplication", asyn
     const card = source.locator('[data-testid^="card-"]').filter({ hasText: title });
     await card.scrollIntoViewIfNeeded();
     await destination.scrollIntoViewIfNeeded();
-    const cardBox = await card.boundingBox();
+    const cardBox = await card.getByRole("button", { name: `Move ${title}` }).boundingBox();
     const destinationBox = await destination.boundingBox();
     if (!cardBox || !destinationBox) throw new Error("Unable to resolve drag coordinates.");
     await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
@@ -97,4 +97,28 @@ test("moves a card from Backlog to Discovery and back without duplication", asyn
   await moveCard(discovery, backlog);
   await expect(backlog).toContainText(title);
   await expect(discovery).not.toContainText(title);
+});
+
+test("moves a card to another column with the keyboard", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const title = `Keyboard move ${Date.now()}`;
+  const backlog = page.getByTestId("column-col-backlog");
+  await backlog.getByRole("button", { name: /add a card/i }).click();
+  await backlog.getByPlaceholder("Card title").fill(title);
+  await backlog.getByRole("button", { name: /add card/i }).click();
+
+  const announcement = page.locator('[id^="DndLiveRegion"]');
+  await backlog.getByRole("button", { name: `Move ${title}` }).focus();
+  await page.keyboard.press("Space");
+  await expect(announcement).toHaveText(`${title} is over Backlog.`);
+  // dnd-kit attaches its arrow-key listener in a setTimeout after pick-up; a later zero-delay timer runs after it.
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve)));
+  await page.keyboard.press("ArrowRight");
+  await expect(announcement).toHaveText(`${title} is over Discovery.`);
+  await page.keyboard.press("Space");
+  await expect(announcement).toHaveText(`Dropped ${title} in Discovery.`);
+
+  await expect(page.getByTestId("column-col-discovery")).toContainText(title);
+  await expect(backlog).not.toContainText(title);
 });
