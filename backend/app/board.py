@@ -52,9 +52,17 @@ def initialize() -> None:
                 [(f"col-{title.lower().replace(' ', '-')}", board_id, title, position) for position, title in enumerate(DEFAULT_COLUMNS)],
             )
             database.executemany(
-                "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, ?)",
-                [(card_id, column_id, title, details, position) for position, (card_id, column_id, title, details) in enumerate(DEFAULT_CARDS)],
+                "INSERT INTO cards (id, column_id, title, details, position) VALUES (?, ?, ?, ?, (SELECT COUNT(*) FROM cards WHERE column_id = ?))",
+                [(card_id, column_id, title, details, column_id) for card_id, column_id, title, details in DEFAULT_CARDS],
             )
+        if database.execute("PRAGMA user_version").fetchone()[0] < 1:
+            # Earlier versions left gaps in card positions; renumber each column to 0..n-1 once.
+            database.execute("""
+                UPDATE cards SET position = ranked.new_position FROM (
+                    SELECT id, ROW_NUMBER() OVER (PARTITION BY column_id ORDER BY position, id) - 1 AS new_position FROM cards
+                ) AS ranked WHERE cards.id = ranked.id
+            """)
+            database.execute("PRAGMA user_version = 1")
 
 
 def board() -> dict:
@@ -82,7 +90,11 @@ def update_card(database: sqlite3.Connection, card_id: str, title: str, details:
 
 
 def delete_card(database: sqlite3.Connection, card_id: str) -> None:
+    card = database.execute("SELECT column_id, position FROM cards WHERE id = ?", (card_id,)).fetchone()
+    if not card:
+        return
     database.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    database.execute("UPDATE cards SET position = position - 1 WHERE column_id = ? AND position > ?", (card["column_id"], card["position"]))
 
 
 def move_card(database: sqlite3.Connection, card_id: str, column_id: str, position: int) -> None:

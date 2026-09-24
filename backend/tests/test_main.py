@@ -7,7 +7,7 @@ import sys
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app import chat
+from app import board, chat
 
 
 client = TestClient(app)
@@ -220,3 +220,47 @@ def test_deleted_demo_card_stays_deleted() -> None:
     board_client.delete("/api/cards/card-1")
 
     assert "card-1" not in board_client.get("/api/board").json()["cards"]
+
+
+def column_titles(board_data: dict, column_id: str) -> list[str]:
+    column = next(column for column in board_data["columns"] if column["id"] == column_id)
+    return [board_data["cards"][card_id]["title"] for card_id in column["cardIds"]]
+
+
+def test_new_cards_are_added_to_the_bottom_of_seeded_columns() -> None:
+    board_client = signed_in_client()
+    for column in board_client.get("/api/board").json()["columns"]:
+        updated = board_client.post(f"/api/columns/{column['id']}/cards", json={"title": f"New in {column['id']}"}).json()
+        assert column_titles(updated, column["id"])[-1] == f"New in {column['id']}"
+
+
+def test_card_order_stays_correct_after_deletes() -> None:
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    for title in ["A", "B"]:
+        board_client.post("/api/columns/col-done/cards", json={"title": title})
+    board_client.delete("/api/cards/card-7")
+    after_add = board_client.post("/api/columns/col-done/cards", json={"title": "C"}).json()
+    assert column_titles(after_add, "col-done") == ["Close onboarding sprint", "A", "B", "C"]
+
+    after_move = board_client.post("/api/cards/card-6/move", json={"column_id": "col-done", "position": 1}).json()
+    assert column_titles(after_move, "col-done") == ["Close onboarding sprint", "QA micro-interactions", "A", "B", "C"]
+
+
+def test_existing_position_gaps_are_renumbered_once() -> None:
+    board_client = signed_in_client()
+    board_client.get("/api/board")
+    with board.connection() as database:
+        database.execute("UPDATE cards SET position = position * 10 + 3")
+        database.execute("PRAGMA user_version = 0")
+
+    board_client.get("/api/board")
+
+    with board.connection() as database:
+        positions = database.execute("SELECT column_id, position FROM cards ORDER BY column_id, position").fetchall()
+        assert database.execute("PRAGMA user_version").fetchone()[0] == 1
+    by_column: dict[str, list[int]] = {}
+    for row in positions:
+        by_column.setdefault(row["column_id"], []).append(row["position"])
+    assert all(column_positions == list(range(len(column_positions))) for column_positions in by_column.values())
+    assert column_titles(board_client.get("/api/board").json(), "col-backlog") == ["Align roadmap themes", "Gather customer signals"]
