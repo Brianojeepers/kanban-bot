@@ -323,3 +323,33 @@ In priority order. Each step should add the tests named in its finding and keep 
 11. **Frontend robustness (M6, L2, L3).** Add a loading state instead of demo data, and handle fetch errors.
 12. **Accessibility (M7).** Add a keyboard sensor and a drag handle.
 13. **Clean-up (L4-L9).** Initialize at startup, remove dead code and the smoke page, run as non-root, and tidy the docs.
+
+## Resolution
+
+Every item above was fixed on 2026-09-24. Each fix has tests that fail without it, and was checked in the running Docker app.
+
+| ID | Commit | Notes |
+|---|---|---|
+| H1 | `3a81ef5` | A forged cookie now gets 401. The port is bound to `127.0.0.1` and the app refuses to start without `SESSION_SECRET`. |
+| H2 | `3c481fb` | One rename request when editing finishes. The original case now saves "Done and shipped" instead of "Doneahd". |
+| H3 | `978f3aa` | Positions are kept at 0..n-1 per column. Existing databases are renumbered once, keeping each column's order. |
+| H4 | `6b036bd` | AI replies are validated with Pydantic before anything is applied. Failures return a readable 502. |
+| M1 | `be93d5e` | Builds use `uv sync --locked` and a `.dockerignore`. |
+| M2 | `8fe5b44` | Every board function takes the signed-in username. IDs from another board return 404. |
+| M3 | `6ab9c02` | Unknown IDs return 404 and blank titles 422. Also fixed: the model made up IDs for cards created in the same reply. |
+| M4 | `b6c249c` | `npm run dev` proxies `/api`, and E2E targets the Docker app by default. |
+| M5 | `23d6530` | Only the 20 most recent messages are sent to the model. |
+| M6, L2, L3 | `039bd7e` | Loading state instead of demo data. The board updates in place after chat replies. Fetch errors are handled. |
+| M7 | `47f7687` | Move handle, keyboard dragging between columns, and announcements by title. |
+| M8, L5 | `f2eea23` | `npm audit` is at 0. The upgrade exposed untyped test files and an untested drag handler, both fixed. Dead code removed. |
+| L4, L6 | `3e2b33b` | Schema is created once at startup. The redundant `/` route and the smoke page are removed. |
+| L7 | `cb5eed0` | Drops show immediately and roll back on failure. The preview matches the card size. |
+| L8 | `ed3713c` | The server runs as a non-root user. |
+| L9 | This commit | Docs moved into `docs/`, stale statements corrected, root README added. |
+| L10 | `8fc315d` plus the tests in each commit above | E2E now covers sign-in failure, edit and delete, and chat. |
+
+Corrections to the review itself:
+- **M1** said 484 MB of `node_modules` was sent as build context. BuildKit transfers the context incrementally, so the size sent varied. What was confirmed is that macOS native packages ended up in the Linux build stage.
+- **L8** called running as non-root a one-line change. It isn't: existing volumes were created by the root-run image, so a plain `USER` switch would have left the database unwritable. The fix hands `/data` to the app user at startup.
+
+Still open, by design for the local MVP (see `review.md`): hardcoded credentials, no rate limiting, no CI, backups or monitoring. Before a second account is added, the seed needs board-specific column and card IDs.

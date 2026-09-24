@@ -164,8 +164,9 @@ proves "this browser is logged in" on every subsequent request.
   "dependency" (`require_session`) attached to each board/chat route so it's
   applied consistently rather than repeated and possibly forgotten.
 - Using a default/guessable secret key in production. For a real product
-  you'd want a strong, unique `SESSION_SECRET` environment variable rather
-  than the development fallback used here.
+  you'd want a strong, unique `SESSION_SECRET` environment variable. The app
+  requires one and refuses to start without it, rather than falling back to
+  a secret written in the source code.
 
 ### 2.5 Containerization (Docker)
 

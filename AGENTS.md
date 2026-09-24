@@ -65,7 +65,7 @@ Frontend (`cd frontend`):
 
 ## Architecture
 
-The app is one Docker image. A Node stage builds the Next.js app with `output: "export"`. That output is copied into `/app/static` of a Python `uv` image, where FastAPI serves both `/api/*` and the static site from the same origin. `backend/static/index.html` in the repo is only the old smoke-test page; the Docker build replaces it. There is no separate API host or CORS.
+The app is one Docker image. A Node stage builds the Next.js app with `output: "export"`. That output is copied into `/app/static` of a Python `uv` image, where FastAPI serves both `/api/*` and the static site from the same origin. `backend/static/index.html` in the repo is only a placeholder; the Docker build replaces it with the Next.js export. There is no separate API host or CORS.
 
 Backend (`backend/app/`):
 - `main.py`: thin route handlers. The `require_session` dependency protects every board and chat endpoint and passes the signed-in username to it. Every mutation endpoint returns the full updated board.

@@ -1,5 +1,7 @@
 # Project Review
 
+Items marked **Resolved** have since been fixed. See `code_review.md` for the current review and its status.
+
 An honest assessment of the approach taken for this MVP, its weaknesses, and
 what's needed to take it from "working demo" to "production-ready product."
 
@@ -43,6 +45,7 @@ what's needed to take it from "working demo" to "production-ready product."
   error is raised. The right fix is to validate every operation's shape
   fully **before** applying any of them, or wrap the whole batch in a single
   transaction that rolls back entirely on any failure.
+  **Resolved:** operations run in one transaction and the reply is validated before any is applied.
 - **No schema migration tooling.** Tables are created with
   `CREATE TABLE IF NOT EXISTS`, which works for the first version of the
   schema but has no story for changing the schema later without wiping data.
@@ -71,6 +74,7 @@ what's needed to take it from "working demo" to "production-ready product."
   session is signed with a publicly-known secret. This should fail loudly
   (raise an error at startup) instead of silently falling back, once this
   moves beyond local development.
+  **Resolved:** the app now refuses to start without `SESSION_SECRET`.
 - **No rate limiting.** Both `/api/login` (brute-force risk) and `/api/chat`
   (cost-control risk — every call spends real money against the OpenRouter
   key) currently accept unlimited requests.
@@ -106,12 +110,14 @@ what's needed to take it from "working demo" to "production-ready product."
 - **No dependency vulnerability scanning.** Nothing currently checks
   `npm`/`uv` dependencies for known CVEs. Tools like `npm audit`,
   `pip-audit`, or Dependabot/Renovate should be added.
+  Partly addressed: both audits were run and the advisories fixed, but nothing runs them automatically.
 - **Test data hygiene during manual/local testing.** Because the SQLite
   volume persists across runs, repeatedly running the app locally
   (especially E2E tests against it) accumulates leftover cards indefinitely.
   This isn't a production concern, but it's worth documenting a "reset local
   data" script (`docker volume rm pm_pm_data`) for contributors — currently
   that knowledge only exists in this review.
+  **Resolved:** the E2E suite deletes its cards, and the root README documents the reset.
 
 ---
 
