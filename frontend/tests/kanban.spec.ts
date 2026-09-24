@@ -7,7 +7,9 @@ const signIn = async (page: import("@playwright/test").Page) => {
 };
 
 test.afterEach(async ({ page }) => {
-  const board = await (await page.request.get("/api/board")).json();
+  const response = await page.request.get("/api/board");
+  if (!response.ok()) return;
+  const board = await response.json();
   for (const card of Object.values(board.cards) as { id: string; title: string }[]) {
     if (/^(Playwright card|Drag card|Adjacent move|Keyboard move) \d+$/.test(card.title)) await page.request.delete(`/api/cards/${card.id}`);
   }
@@ -121,4 +123,56 @@ test("moves a card to another column with the keyboard", async ({ page }) => {
 
   await expect(page.getByTestId("column-col-discovery")).toContainText(title);
   await expect(backlog).not.toContainText(title);
+});
+
+test("rejects a wrong password", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Username").fill("user");
+  await page.getByLabel("Password").fill("wrong");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByText("Invalid username or password.")).toBeVisible();
+  await expect(page.getByTestId("column-col-backlog")).toHaveCount(0);
+});
+
+test("edits and deletes a card", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const title = `Playwright card ${Date.now()}`;
+  const backlog = page.getByTestId("column-col-backlog");
+  await backlog.getByRole("button", { name: /add a card/i }).click();
+  await backlog.getByPlaceholder("Card title").fill(title);
+  await backlog.getByRole("button", { name: /add card/i }).click();
+  // Lock onto the card's test id: in edit mode its title is in an input, so a text filter stops matching.
+  const testId = await backlog.locator('[data-testid^="card-"]').filter({ hasText: title }).getAttribute("data-testid");
+  const card = page.getByTestId(testId!);
+
+  await card.getByRole("button", { name: "Edit" }).click();
+  await card.getByLabel("Card details").fill("Edited in the browser.");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card).toContainText("Edited in the browser.");
+  await page.reload();
+  await expect(card).toContainText("Edited in the browser.");
+
+  await backlog.getByRole("button", { name: `Delete ${title}` }).click();
+  await expect(backlog).not.toContainText(title);
+});
+
+test("shows a chat reply and applies the board it returns", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const title = `Playwright card ${Date.now()}`;
+  await page.route("**/api/chat", async (route) => {
+    const board = await (await page.request.get("/api/board")).json();
+    board.cards["card-chat"] = { id: "card-chat", title, details: "From the assistant." };
+    board.columns[0].cardIds.push("card-chat");
+    const messages = [{ role: "user", content: "Add a card" }, { role: "assistant", content: "Added it." }];
+    await route.fulfill({ json: { response: "Added it.", messages, board } });
+  });
+
+  const input = page.getByPlaceholder("Ask about your board");
+  await input.fill("Add a card");
+  await input.press("Enter");
+
+  await expect(page.locator("aside").getByText("Added it.")).toBeVisible();
+  await expect(page.getByTestId("column-col-backlog")).toContainText(title);
 });
