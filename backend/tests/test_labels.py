@@ -3,7 +3,8 @@ import json
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app import chat, db
+from app import db
+from tests.fake_openrouter import mock_provider
 
 BOARD = "/api/boards/1"
 
@@ -69,13 +70,7 @@ def test_deleting_a_card_or_its_board_deletes_its_labels() -> None:
 
 def test_the_ai_can_label_cards(monkeypatch) -> None:
     client = demo_client()
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps({"response": "Done", "operations": [{"action": "edit_card", "card_id": "card-1", "labels": ["urgent"]}]})}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, {"response": "Done", "operations": [{"action": "edit_card", "card_id": "card-1", "labels": ["urgent"]}]})
 
     card = client.post(f"{BOARD}/chat", json={"message": "Tag it"}).json()["board"]["cards"]["card-1"]
 

@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app import board, chat, db
+from tests.fake_openrouter import mock_provider
 from app.rate_limit import daily_chat_limiter, describe_wait
 
 
@@ -160,13 +161,7 @@ def test_moving_a_card_between_adjacent_columns_never_duplicates_it() -> None:
 
 
 def test_chat_persists_a_mocked_assistant_reply(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"I can help.","operations":[]}'}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, '{"response":"I can help.","operations":[]}')
     response = signed_in_client().post(f"{BOARD}/chat", json={"message": "What is next?"})
 
     assert response.status_code == 200
@@ -178,14 +173,8 @@ def test_chat_persists_a_mocked_assistant_reply(monkeypatch) -> None:
 
 
 def test_chat_applies_a_valid_card_operation(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     column_id = signed_in_client().get(BOARD).json()["columns"][0]["id"]
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": f'{{"response":"Added it.","operations":[{{"action":"create_card","column_id":"{column_id}","title":"AI task"}}]}}'}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, f'{{"response":"Added it.","operations":[{{"action":"create_card","column_id":"{column_id}","title":"AI task"}}]}}')
     response = signed_in_client().post(f"{BOARD}/chat", json={"message": "Add a task"})
 
     assert response.status_code == 200
@@ -196,42 +185,26 @@ def test_chat_rejects_missing_key_and_invalid_operations(monkeypatch) -> None:
     response = signed_in_client().post(f"{BOARD}/chat", json={"message": "Hello"})
     assert response.status_code == 502
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"No","operations":[{"action":"bad"}]}'}}]}
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, '{"response":"No","operations":[{"action":"bad"}]}')
     assert signed_in_client().post(f"{BOARD}/chat", json={"message": "Hello"}).status_code == 502
 
 
 def test_chat_applies_no_operations_when_any_is_invalid(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     board_client = signed_in_client()
     before = board_client.get(BOARD).json()
     column_id = before["columns"][0]["id"]
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": f'{{"response":"Done.","operations":[{{"action":"create_card","column_id":"{column_id}","title":"Partial"}},{{"action":"bad"}}]}}'}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, f'{{"response":"Done.","operations":[{{"action":"create_card","column_id":"{column_id}","title":"Partial"}},{{"action":"bad"}}]}}')
 
     assert board_client.post(f"{BOARD}/chat", json={"message": "Add a task"}).status_code == 502
     assert board_client.get(BOARD).json() == before
 
 
 def test_chat_accepts_every_operation_shape_in_the_system_prompt(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     examples = [line for line in chat.SYSTEM_PROMPT.splitlines() if line.startswith('{"action"')]
     filled = [re.sub(r"<0-based[^>]*>", "0", line).replace("<column id>", "col-done").replace("<card id>", "card-1").replace("<title>", "From prompt").replace("<details>", "").replace("<priority>", '"high"').replace("<due date>", '"2026-10-01"').replace("<assignee>", '"user"').replace("<labels>", '["ux"]') for line in examples]
     operations = [json.loads(line) for line in filled]
     assert [operation["action"] for operation in operations] == ["create_card", "edit_card", "move_card", "delete_card"]
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps({"response": "Done.", "operations": operations})}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, {"response": "Done.", "operations": operations})
     response = signed_in_client().post(f"{BOARD}/chat", json={"message": "Use every operation"})
 
     assert response.status_code == 200
@@ -324,15 +297,9 @@ MALFORMED_AI_REPLIES = {
 
 @pytest.mark.parametrize("reply", MALFORMED_AI_REPLIES.values(), ids=MALFORMED_AI_REPLIES.keys())
 def test_chat_rejects_malformed_ai_replies_without_changing_the_board(monkeypatch, reply) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     board_client = signed_in_client()
     before = board_client.get(BOARD).json()
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps(reply)}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, reply)
     response = board_client.post(f"{BOARD}/chat", json={"message": "Do something"})
 
     assert response.status_code == 502
@@ -342,13 +309,7 @@ def test_chat_rejects_malformed_ai_replies_without_changing_the_board(monkeypatc
 
 
 def test_chat_reports_an_unexpected_provider_response(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"error": {"message": "Rate limited"}}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, {}, status=500)
     response = signed_in_client().post(f"{BOARD}/chat", json={"message": "Hello"})
 
     assert response.status_code == 502
@@ -444,41 +405,28 @@ def test_signed_in_user_cannot_change_another_users_board(method, path, body) ->
 
 
 def test_ai_cannot_change_another_users_board(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     board_client = signed_in_client()
     board_client.get(BOARD)
     add_other_users_board()
     other_before = other_users_rows()
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps({"response": "Done", "operations": [{"action": "delete_card", "card_id": "other-card"}]})}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, {"response": "Done", "operations": [{"action": "delete_card", "card_id": "other-card"}]})
 
     assert board_client.post(f"{BOARD}/chat", json={"message": "Delete other-card"}).status_code == 502
     assert other_users_rows() == other_before
 
 
 def test_chat_sends_only_recent_history_to_the_model(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     board_client = signed_in_client()
     board_client.get(BOARD)
     for number in range(30):
         board.add_message(1, "user", f"Old message {number}")
-    sent = {}
+    requests = mock_provider(monkeypatch, {"response": "Hi", "operations": []})
 
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
-
-    def capture(*args, **kwargs):
-        sent.update(kwargs["json"])
-        return Response()
-
-    monkeypatch.setattr(chat.httpx, "post", capture)
     board_client.post(f"{BOARD}/chat", json={"message": "Latest"})
 
+    sent = requests[0]
+    assert sent["model"] == chat.MODEL
+    assert sent["response_format"]["type"] == "json_schema"
     history = sent["messages"][1:-1]
     assert len(history) == chat.HISTORY_LIMIT
     assert history[0]["content"] == "Old message 10"
@@ -506,14 +454,7 @@ def test_successful_logins_do_not_count_towards_the_limit() -> None:
 
 
 def test_chat_is_limited_per_user(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
-
-    calls = []
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: calls.append(1) or Response())
+    calls = mock_provider(monkeypatch, {"response": "Hi", "operations": []})
     board_client = signed_in_client()
 
     assert [board_client.post(f"{BOARD}/chat", json={"message": "Hi"}).status_code for _ in range(10)] == [200] * 10
@@ -522,16 +463,10 @@ def test_chat_is_limited_per_user(monkeypatch) -> None:
 
 
 def test_chat_has_a_daily_limit_that_rolls_over(monkeypatch) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     now = [1000.0]
     monkeypatch.setattr("app.rate_limit.monotonic", lambda: now[0])
     monkeypatch.setattr(daily_chat_limiter, "limit", 3)
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, '{"response":"Hi","operations":[]}')
     board_client = signed_in_client()
     send = lambda: board_client.post(f"{BOARD}/chat", json={"message": "Hi"})
 

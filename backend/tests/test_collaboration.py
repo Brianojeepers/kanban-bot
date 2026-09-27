@@ -3,7 +3,8 @@ import json
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app import chat, db
+from app import db
+from tests.fake_openrouter import mock_provider
 
 
 def register(username: str) -> TestClient:
@@ -130,14 +131,8 @@ def test_the_log_keeps_the_latest_fifty_entries() -> None:
 
 def test_ai_changes_are_logged_as_made_through_the_assistant(monkeypatch) -> None:
     alice, _, base, card_id = shared_board_with_card()
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     reply = {"response": "Done", "operations": [{"action": "edit_card", "card_id": card_id, "priority": "low"}, {"action": "edit_card", "card_id": card_id}]}
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps(reply)}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, reply)
     alice.post(f"{base}/chat", json={"message": "Lower it"})
 
     assert [(entry["actor"], entry["action"]) for entry in alice.get(f"{base}/activity").json()[:2]] == [

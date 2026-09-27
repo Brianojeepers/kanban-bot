@@ -3,23 +3,14 @@ import json
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app import chat
+
+from tests.fake_openrouter import mock_provider
 
 
 def demo_client() -> TestClient:
     signed_in = TestClient(app)
     signed_in.post("/api/login", json={"username": "user", "password": "password"})
     return signed_in
-
-
-def mock_reply(monkeypatch, reply: dict) -> None:
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps(reply)}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
 
 
 def test_boards_are_listed_in_creation_order() -> None:
@@ -67,7 +58,7 @@ def test_deleting_a_board_removes_its_cards_and_messages(monkeypatch) -> None:
     client = demo_client()
     second = client.post("/api/boards", json={"name": "Second"}).json()
     client.post(f"/api/boards/{second['id']}/columns/{second['columns'][0]['id']}/cards", json={"title": "Temp"})
-    mock_reply(monkeypatch, {"response": "Hi", "operations": []})
+    mock_provider(monkeypatch, {"response": "Hi", "operations": []})
     client.post(f"/api/boards/{second['id']}/chat", json={"message": "Hello"})
 
     remaining = client.delete(f"/api/boards/{second['id']}").json()
@@ -98,7 +89,7 @@ def test_board_endpoints_require_a_session() -> None:
 def test_chat_history_is_kept_per_board(monkeypatch) -> None:
     client = demo_client()
     second = client.post("/api/boards", json={"name": "Second"}).json()
-    mock_reply(monkeypatch, {"response": "Hi", "operations": []})
+    mock_provider(monkeypatch, {"response": "Hi", "operations": []})
 
     client.post(f"/api/boards/{second['id']}/chat", json={"message": "Only here"})
 
@@ -110,7 +101,7 @@ def test_the_ai_can_only_change_the_board_it_is_asked_about(monkeypatch) -> None
     client = demo_client()
     second = client.post("/api/boards", json={"name": "Second"}).json()
     before = client.get("/api/boards/1").json()
-    mock_reply(monkeypatch, {"response": "Done", "operations": [{"action": "delete_card", "card_id": "card-1"}]})
+    mock_provider(monkeypatch, {"response": "Done", "operations": [{"action": "delete_card", "card_id": "card-1"}]})
 
     assert client.post(f"/api/boards/{second['id']}/chat", json={"message": "Delete it"}).status_code == 502
     assert client.get("/api/boards/1").json() == before
@@ -151,7 +142,7 @@ def test_invalid_priority_and_due_date_are_rejected() -> None:
 
 def test_the_ai_can_set_priority_and_due_date_and_leaves_other_fields_alone(monkeypatch) -> None:
     client = demo_client()
-    mock_reply(monkeypatch, {"response": "Done", "operations": [{"action": "edit_card", "card_id": "card-1", "priority": "high", "due_date": "2026-10-15"}]})
+    mock_provider(monkeypatch, {"response": "Done", "operations": [{"action": "edit_card", "card_id": "card-1", "priority": "high", "due_date": "2026-10-15"}]})
 
     card = client.post("/api/boards/1/chat", json={"message": "Make it urgent"}).json()["board"]["cards"]["card-1"]
 
@@ -160,12 +151,11 @@ def test_the_ai_can_set_priority_and_due_date_and_leaves_other_fields_alone(monk
 
 def test_the_prompt_tells_the_model_todays_date(monkeypatch) -> None:
     client = demo_client()
-    mock_reply(monkeypatch, {"response": "Hi", "operations": []})
-    sent = {}
-    original = chat.httpx.post
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: sent.update(kwargs["json"]) or original(*args, **kwargs))
+    requests = mock_provider(monkeypatch, {"response": "Hi", "operations": []})
 
     client.post("/api/boards/1/chat", json={"message": "When?"})
 
-    assert "Today is 20" in sent["messages"][0]["content"]
-    assert "{today}" not in sent["messages"][0]["content"]
+    instructions = requests[0]["messages"][0]
+    assert instructions["role"] == "system"
+    assert "Today is 20" in instructions["content"]
+    assert "{today}" not in instructions["content"]

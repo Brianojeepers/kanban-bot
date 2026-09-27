@@ -3,7 +3,8 @@ import json
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app import chat, db
+from app import db
+from tests.fake_openrouter import mock_provider
 
 
 def register(username: str) -> TestClient:
@@ -49,13 +50,7 @@ def test_members_can_work_on_the_board_and_its_chat(monkeypatch) -> None:
     assert after["columns"][0]["title"] == "Ideas"
     assert after["columns"][1]["cardIds"] == [card_id]
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": '{"response":"Hi","operations":[]}'}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, '{"response":"Hi","operations":[]}')
     bob.post(f"/api/boards/{board['id']}/chat", json={"message": "Shared question"})
     assert alice.get(f"/api/boards/{board['id']}/messages").json()[0] == {"role": "user", "content": "Shared question", "author": "bob"}
 
@@ -160,14 +155,8 @@ def test_the_ai_can_assign_cards_to_members_but_not_to_others(monkeypatch) -> No
     register("carol")
     base = f"/api/boards/{board['id']}"
     card_id = alice.post(f"{base}/columns/{board['columns'][0]['id']}/cards", json={"title": "Task"}).json()["columns"][0]["cardIds"][0]
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     reply = {}
-
-    class Response:
-        def raise_for_status(self) -> None: pass
-        def json(self) -> dict: return {"choices": [{"message": {"content": json.dumps(reply)}}]}
-
-    monkeypatch.setattr(chat.httpx, "post", lambda *args, **kwargs: Response())
+    mock_provider(monkeypatch, reply)
 
     reply.update({"response": "Done", "operations": [{"action": "edit_card", "card_id": card_id, "assignee": "carol"}]})
     assert alice.post(f"{base}/chat", json={"message": "Give it to carol"}).status_code == 502
