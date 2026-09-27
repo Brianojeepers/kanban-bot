@@ -1,21 +1,22 @@
-# The Project Management MVP web app
+# The Project Management web app
 
 ## Business Requirements
 
 This project is a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- A user can register, sign in, change their password and delete their account
+- When signed in, the user sees their Kanban boards; they can create, rename, delete and share boards
+- Each Kanban board has fixed columns that can be renamed
+- The cards on the Kanban board can be moved with drag and drop, and edited: title, details, priority, due date, assignee and labels, plus a checklist and comments. Cards can be archived and restored
+- Boards can be searched and filtered, each board keeps an activity log, and "My work" lists the user's assigned cards across boards
+- There is an AI chat feature in a sidebar; the AI is able to create / edit / move / delete one or more cards
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+Users register with a username and password. A demo account (`user` / `password`) is seeded into a new, empty database.
 
-For the MVP, there will only be 1 Kanban board per signed in user.
+Each user can have several Kanban boards and share them with other users; each board has exactly five columns.
 
-For the MVP, this will run locally (in a docker container)
+The app runs locally (in a docker container).
 
 ## Technical Decisions
 
@@ -30,7 +31,7 @@ For the MVP, this will run locally (in a docker container)
 
 ## Current State
 
-The MVP is complete. The Next.js frontend in frontend/ is statically exported and served by the FastAPI backend in backend/, all built into a single Docker image. Sign in, board data, and AI chat are backed by the API and SQLite.
+The MVP is complete and has been extended with accounts (registration, password change, account deletion), several boards per user, board sharing with members, card priority, due dates (with overdue and due-soon warnings), assignees and labels, card checklists and comments, archiving cards, a per-board activity log, a "My work" list of the user's assigned cards across boards, board search and filters, and hover tooltips on every icon. The Next.js frontend in frontend/ is statically exported and served by the FastAPI backend in backend/, all built into a single Docker image. Accounts, board data, and AI chat are backed by the API and SQLite. `docs/PLAN.md` lists what is done and what is planned next; `docs/database-schema.json` documents the database (schema version 7).
 
 ## Color Scheme
 
@@ -60,7 +61,8 @@ Backend (`cd backend`, managed with `uv`):
 Frontend (`cd frontend`):
 - `npm run dev` serves the UI on port 3000 and proxies `/api` to the backend on port 8000 (the Docker app or the local backend server); `npm run build` (static export to `out/`), `npm run lint`
 - `npm run test:unit` runs Vitest; add `-- src/lib/kanban.test.ts` to run one file or `-- -t "name"` to filter by test name.
-- `npm run test:e2e` runs Playwright against the running Docker app at http://localhost:8000; set `PLAYWRIGHT_BASE_URL` to target another server, such as `http://localhost:3000` for `npm run dev`.
+- `npm run test:e2e` runs Playwright against the running Docker app at http://localhost:8000; set `PLAYWRIGHT_BASE_URL` to target another server, such as `http://localhost:3000` for `npm run dev`. Rebuild the app (`scripts/start.sh`) first so it runs the current code.
+- `npm run build` type-checks test files too, so a type error in a test fails the Docker build (and `scripts/start.sh` then leaves the previous container running).
 - Frontend unit coverage must also be at least 80%.
 
 ## Architecture
@@ -68,20 +70,18 @@ Frontend (`cd frontend`):
 The app is one Docker image. A Node stage builds the Next.js app with `output: "export"`. That output is copied into `/app/static` of a Python `uv` image, where FastAPI serves both `/api/*` and the static site from the same origin. `backend/static/index.html` in the repo is only a placeholder; the Docker build replaces it with the Next.js export. There is no separate API host or CORS.
 
 Backend (`backend/app/`):
-- `main.py`: thin route handlers. The `require_session` dependency protects every board and chat endpoint and passes the signed-in username to it. Every mutation endpoint returns the full updated board.
-- `auth.py`: fixed `user`/`password` login and an HMAC-signed, HTTP-only `pm_session` cookie. The signing key comes from `SESSION_SECRET`; the app refuses to start without it.
-- `rate_limit.py`: in-memory rolling-window limits returning 429 with `Retry-After`: 10 failed sign-ins per minute per client address, and 10 chat messages per minute and 100 per rolling 24 hours per user. They reset when the app restarts.
-- `board.py`: SQLite access with raw `sqlite3`. `initialize()` creates the tables and seeds the user, the five columns, and the demo cards; it runs on each read. Cards keep an explicit `position` within each column, and `move_card` shifts positions in both the source and destination columns. Every function takes the username and only reads or changes that user's board; ids from another board are reported as not found. The schema supports multiple users (see `docs/database-schema.json`), but the seed uses fixed column and card ids, so seeding must generate per-board ids before a second account is added.
-- `chat.py`: calls OpenRouter (`openai/gpt-oss-120b`) through `httpx` in JSON mode. It sends chat history plus the current board, then applies the returned `create_card`/`edit_card`/`move_card`/`delete_card` operations through the same `board.py` functions the HTTP routes use, and saves both messages. Tests mock `chat.httpx.post`.
+- `main.py`: thin route handlers. Board, column, card, comment, checklist, activity, archive and chat routes live under `/api/boards/{board_id}/...`. `require_session` resolves the session cookie to a `User`; `owned_board` additionally checks that the user owns or is a member of the `{board_id}` in the path (404 otherwise); owner-only actions (rename, delete, add or remove members) also call `board.require_owner` (403). Every board mutation returns the full updated board (comment and checklist changes return it alongside the updated list). `GET /api/my-cards` lists the user's assigned cards across boards.
+- `auth.py`: scrypt password hashing and the HMAC-signed, HTTP-only `pm_session` cookie. The token is `{user_id}.{signature}`, where the signature covers the user's `session_key`; rotating that key (on password change) signs out every other session. The signing key comes from `SESSION_SECRET`; the app refuses to start without it.
+- `accounts.py`: register (creates an empty "My first board"), sign in, session lookup, password change and account deletion (which deletes the user's own boards, removes their memberships and assignments, and clears the authorship of their messages, comments and activity, which then show as "Former member"). Usernames are unique ignoring case.
+- `db.py`: the SQLite connection, `NotFoundError`/`ForbiddenError`/`ConflictError` (mapped to 404/403/409), and `initialize()`, which creates the version 1 schema and applies migrations in order using `PRAGMA user_version`, so new and existing databases take the same path. It seeds the demo account and board (with fixed ids) only into an empty database.
+- `board.py`: raw `sqlite3` access for boards, members, cards, labels, checklists, comments, archive and the activity log. Functions take a `board_id` that the route has already authorized; column and card ids from another board are reported as not found. Active cards keep an explicit `position` (0..n-1) within each column, and `move_card` shifts positions in both columns; archived cards have position -1 and are left out of the board. Mutations return a short description (`moved "Task" to Review`) that the caller passes to `board.record` for the board's activity log, with the acting user (AI changes are suffixed "(via assistant)"). `update_card` changes only the fields given. Assignees are given as usernames and must be the board's owner or a member; removing a member unassigns their cards on that board.
+- `rate_limit.py`: in-memory rolling-window limits returning 429 with `Retry-After`: 10 failed sign-ins per minute and 5 registrations per hour per client address, and 10 chat messages per minute and 100 per rolling 24 hours per user. They reset when the app restarts.
+- `chat.py`: calls OpenRouter (`openai/gpt-oss-120b`) through `httpx` in JSON mode. It sends the board's chat history plus the current board and today's date, then applies the returned `create_card`/`edit_card`/`move_card`/`delete_card` operations (including priority, due date, assignee and labels) to that board only, through the same `board.py` functions the HTTP routes use, and saves both messages, the user's with its author. Tests mock `chat.httpx.post`.
 
 Frontend (`frontend/src/`):
-- `AuthGate` checks `/api/session`, shows the login form or the board, and places `KanbanBoard` next to `ChatSidebar`. `AuthGate` holds the board state: `KanbanBoard` loads it and shows a loading state until it arrives, and a chat reply passes its returned board straight in, so the board updates in place.
-- `lib/api.ts` wraps the board endpoints. `lib/kanban.ts` holds the `BoardData` types and `getMoveTarget`, which turns a DnD Kit drop into the column and position sent to the move endpoint.
-- The board shape is `{ columns: [{id, title, cardIds}], cards: {id: {id, title, details}} }` on both backend and frontend.
-
-`backend/AGENTS.md`, `frontend/AGENTS.md`, and `scripts/AGENTS.md` contain per-directory rules.
-
-## Working documentation
-
-All documents for planning and executing this project will be in the docs/ directory.
-Please review the docs/PLAN.md document before proceeding.
+- `AuthGate` checks `/api/session` and shows the sign-in or registration form, or the `Workspace`.
+- `Workspace` loads the board list, tracks the open board and its data, and renders `KanbanBoard` (with `BoardSwitcher` and the account and log out buttons in its header), `ChatSidebar`, `ShareDialog`, `ActivityDialog`, `ArchiveDialog`, `MyWorkDialog` and `AccountDialog` (all built on `Modal`). Opening a board from My work refreshes the board list first if it does not have that board yet. Board data that arrives for a board that is no longer open (a late mutation or chat reply) is dropped.
+- `KanbanBoard` loads the open board, applies mutations, runs drag and drop, and filters cards with `BoardFilters` (text, priority, assignee, label, due date; newly added cards stay visible until the filter changes), archives cards, and opens a card's `CardDialog` (checklist and comments).
+- `lib/api.ts` wraps every endpoint and throws `ApiError` carrying the server's `detail`. `lib/kanban.ts` holds the types, `getMoveTarget` (turns a DnD Kit drop into the column and position sent to the move endpoint), due date helpers, label helpers, `timeAgo` and `matchesFilter`.
+- Icon buttons and badges explain themselves with CSS tooltips (`data-tooltip`, styled in `globals.css`).
+- The board shape is `{ id, name, owner, members, labels, columns: [{id, title, cardIds}], cards: {id: {id, title, details, priority, dueDate, assignee, labels, comments, checklist}} }` on both backend and frontend. Board `members` lists every username that can open the board, owner first; board `labels` are the distinct labels on its cards; a card's `comments` is its comment count and `checklist` is `{done, total}`. Archived cards are left out of the board. Request bodies use snake_case (`column_id`, `due_date`).

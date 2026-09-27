@@ -41,6 +41,8 @@ class RateLimiter:
 
 # Only failed sign-ins count, so signing in and out repeatedly is never blocked.
 login_limiter = RateLimiter(limit=10, window=60)
+# Every attempt counts, so one address cannot mass-create accounts.
+registration_limiter = RateLimiter(limit=5, window=60 * 60)
 chat_limiter = RateLimiter(limit=10, window=60)
 # Caps AI spend: every chat request calls the model, whether or not its reply is usable.
 daily_chat_limiter = RateLimiter(limit=100, window=24 * 60 * 60)

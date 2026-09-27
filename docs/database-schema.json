@@ -1,17 +1,146 @@
 {
-  "database": "SQLite at /data/pm.db",
+  "database": "SQLite at /data/pm.db (DATABASE_PATH). Schema version is PRAGMA user_version; db.initialize() applies migrations in order.",
+  "version": 7,
   "tables": {
-    "users": {"columns": ["id INTEGER PRIMARY KEY", "username TEXT UNIQUE NOT NULL"]},
-    "boards": {"columns": ["id INTEGER PRIMARY KEY", "user_id INTEGER UNIQUE NOT NULL REFERENCES users(id)"]},
-    "columns": {"columns": ["id TEXT PRIMARY KEY", "board_id INTEGER NOT NULL REFERENCES boards(id)", "title TEXT NOT NULL", "position INTEGER NOT NULL"]},
-    "cards": {"columns": ["id TEXT PRIMARY KEY", "column_id TEXT NOT NULL REFERENCES columns(id)", "title TEXT NOT NULL", "details TEXT NOT NULL", "position INTEGER NOT NULL"]},
-    "messages": {"columns": ["id INTEGER PRIMARY KEY", "board_id INTEGER NOT NULL REFERENCES boards(id)", "role TEXT NOT NULL", "content TEXT NOT NULL", "created_at TEXT NOT NULL"]}
+    "users": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "username TEXT UNIQUE NOT NULL",
+        "password_hash TEXT NOT NULL (scrypt$salt$hash)",
+        "session_key TEXT NOT NULL (rotated on password change)"
+      ]
+    },
+    "boards": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "user_id INTEGER NOT NULL REFERENCES users(id)",
+        "name TEXT NOT NULL"
+      ],
+      "indexes": [
+        "boards_user_id (user_id)"
+      ]
+    },
+    "columns": {
+      "columns": [
+        "id TEXT PRIMARY KEY",
+        "board_id INTEGER NOT NULL REFERENCES boards(id)",
+        "title TEXT NOT NULL",
+        "position INTEGER NOT NULL"
+      ]
+    },
+    "cards": {
+      "columns": [
+        "id TEXT PRIMARY KEY",
+        "column_id TEXT NOT NULL REFERENCES columns(id)",
+        "title TEXT NOT NULL",
+        "details TEXT NOT NULL",
+        "position INTEGER NOT NULL",
+        "priority TEXT (low | medium | high | NULL)",
+        "due_date TEXT (YYYY-MM-DD | NULL)",
+        "assignee_id INTEGER REFERENCES users(id) (the board's owner or a member | NULL)",
+        "archived_at TEXT (UTC | NULL for active cards; archived cards have position -1)"
+      ]
+    },
+    "messages": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "board_id INTEGER NOT NULL REFERENCES boards(id)",
+        "role TEXT NOT NULL",
+        "content TEXT NOT NULL",
+        "created_at TEXT NOT NULL",
+        "user_id INTEGER REFERENCES users(id) (author of a user message | NULL)"
+      ]
+    },
+    "board_members": {
+      "columns": [
+        "board_id INTEGER NOT NULL REFERENCES boards(id)",
+        "user_id INTEGER NOT NULL REFERENCES users(id)"
+      ],
+      "primary_key": [
+        "board_id",
+        "user_id"
+      ],
+      "indexes": [
+        "board_members_user_id (user_id)"
+      ]
+    },
+    "comments": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "card_id TEXT NOT NULL REFERENCES cards(id)",
+        "user_id INTEGER REFERENCES users(id) (NULL once the author's account is deleted)",
+        "content TEXT NOT NULL",
+        "created_at TEXT NOT NULL (UTC)"
+      ],
+      "indexes": [
+        "comments_card_id (card_id)"
+      ]
+    },
+    "activity": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "board_id INTEGER NOT NULL REFERENCES boards(id)",
+        "user_id INTEGER REFERENCES users(id) (NULL once the actor's account is deleted)",
+        "action TEXT NOT NULL (e.g. moved \"Task\" to Review)",
+        "created_at TEXT NOT NULL (UTC)"
+      ],
+      "indexes": [
+        "activity_board_id (board_id)"
+      ]
+    },
+    "card_labels": {
+      "columns": [
+        "card_id TEXT NOT NULL REFERENCES cards(id)",
+        "label TEXT NOT NULL COLLATE NOCASE"
+      ],
+      "primary_key": [
+        "card_id",
+        "label"
+      ]
+    },
+    "checklist_items": {
+      "columns": [
+        "id INTEGER PRIMARY KEY",
+        "card_id TEXT NOT NULL REFERENCES cards(id)",
+        "text TEXT NOT NULL",
+        "done INTEGER NOT NULL DEFAULT 0",
+        "position INTEGER NOT NULL"
+      ],
+      "indexes": [
+        "checklist_items_card_id (card_id)"
+      ]
+    }
   },
   "constraints": [
-    "Each user has one board.",
-    "Each board has five seeded columns with fixed positions 0 through 4.",
-    "Cards are ordered by position within their column.",
-    "Messages are ordered by created_at and persist with the board."
+    "A user has one or more boards; the last one cannot be deleted.",
+    "boards.user_id is the owner; board_members lists the other users who can open the board.",
+    "Usernames are unique ignoring case (checked by the application).",
+    "Each board has five columns with fixed positions 0 through 4. Column and card ids are generated (col-<uuid>, card-<uuid>), except the seeded demo board's.",
+    "Active cards (archived_at IS NULL) are ordered by position (0..n-1) within their column; archived cards have position -1.",
+    "Cards are ordered by position (0..n-1) within their column.",
+    "Messages belong to a board and are ordered by created_at, then id.",
+    "Deleting a card deletes its comments, labels and checklist. Deleting a board or an account deletes its cards, labels, checklists, comments, columns, members, messages and activity in application code (the foreign keys have no ON DELETE CASCADE). Deleting an account also removes its memberships and clears its card assignments and the authorship of its messages, comments and activity."
   ],
-  "seed": {"username": "user", "columns": ["Backlog", "Discovery", "In Progress", "Review", "Done"]}
+  "migrations": {
+    "1": "Renumber card positions to 0..n-1 within each column.",
+    "2": "Add users.password_hash and users.session_key; rebuild boards without UNIQUE(user_id) and with a name; add cards.priority and cards.due_date. Existing users get the demo password.",
+    "3": "Add board_members and cards.assignee_id.",
+    "4": "Add messages.user_id, set to the board owner for existing user messages.",
+    "5": "Add comments and activity.",
+    "6": "Add card_labels.",
+    "7": "Add checklist_items and cards.archived_at."
+  },
+  "seed": {
+    "when": "the users table is empty",
+    "username": "user",
+    "password": "password",
+    "board": "Product roadmap",
+    "columns": [
+      "Backlog",
+      "Discovery",
+      "In Progress",
+      "Review",
+      "Done"
+    ]
+  }
 }

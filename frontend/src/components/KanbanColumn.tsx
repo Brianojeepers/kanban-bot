@@ -4,27 +4,37 @@ import { useDroppable } from "@dnd-kit/core";
 import { Inbox } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
+import type { CardFields } from "@/lib/api";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
 type KanbanColumnProps = {
   column: Column;
   accent: string;
+  // The cards to show: all of the column's cards, or those matching the board's filter.
   cards: Card[];
+  isFiltered?: boolean;
+  members: string[];
   onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
+  onAddCard: (columnId: string, fields: CardFields & { title: string }) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
-  onEditCard: (cardId: string, title: string, details: string) => void;
+  onEditCard: (cardId: string, fields: CardFields) => void;
+  onOpenCard: (cardId: string) => void;
+  onArchiveCard: (cardId: string) => void;
 };
 
 export const KanbanColumn = ({
   column,
   accent,
   cards,
+  isFiltered = false,
+  members,
   onRename,
   onAddCard,
   onDeleteCard,
   onEditCard,
+  onOpenCard,
+  onArchiveCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id, data: { type: "column" } });
   const [draftTitle, setDraftTitle] = useState(column.title);
@@ -61,17 +71,20 @@ export const KanbanColumn = ({
           aria-label="Column title"
           maxLength={200}
         />
-        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--gray-text)] shadow-[var(--shadow-soft)]">
+        <span data-tooltip={cards.length === 1 ? "1 card shown in this column" : `${cards.length} cards shown in this column`} data-tooltip-align="end" className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--gray-text)] shadow-[var(--shadow-soft)]">
           <span className="sr-only">Cards: </span>{cards.length}
         </span>
       </div>
       <div className="flex flex-1 flex-col gap-2">
-        <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
               key={card.id}
               card={card}
+              members={members}
               onEdit={onEditCard}
+              onOpen={onOpenCard}
+              onArchive={onArchiveCard}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
             />
           ))}
@@ -79,12 +92,12 @@ export const KanbanColumn = ({
         {cards.length === 0 && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--navy-dark)]/10 px-3 py-8 text-center text-xs font-medium text-[var(--gray-text)]">
             <Inbox className="size-5 opacity-60" aria-hidden />
-            Drop a card here
+            {isFiltered ? "No matching cards" : "Drop a card here"}
           </div>
         )}
       </div>
       <NewCardForm
-        onAdd={(title, details) => onAddCard(column.id, title, details)}
+        onAdd={(fields) => onAddCard(column.id, fields)}
       />
     </section>
   );

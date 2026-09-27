@@ -6,12 +6,15 @@ const signIn = async (page: import("@playwright/test").Page) => {
   await page.getByRole("button", { name: "Sign in" }).click();
 };
 
+// The demo account's seeded board.
+const BOARD = "/api/boards/1";
+
 test.afterEach(async ({ page }) => {
-  const response = await page.request.get("/api/board");
+  const response = await page.request.get(BOARD);
   if (!response.ok()) return;
   const board = await response.json();
   for (const card of Object.values(board.cards) as { id: string; title: string }[]) {
-    if (/^(Playwright card|Drag card|Adjacent move|Keyboard move) \d+$/.test(card.title)) await page.request.delete(`/api/cards/${card.id}`);
+    if (/^(Playwright card|Drag card|Adjacent move|Keyboard move) \d+$/.test(card.title)) await page.request.delete(`${BOARD}/cards/${card.id}`);
   }
 });
 
@@ -169,7 +172,7 @@ test("logs out and keeps the board protected", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
-  expect((await page.request.get("/api/board")).status()).toBe(401);
+  expect((await page.request.get(BOARD)).status()).toBe(401);
 });
 
 test("fits a phone screen without sideways scrolling", async ({ page }) => {
@@ -220,9 +223,9 @@ test("shows a chat reply and applies the board it returns", async ({ page }) => 
   await page.goto("/");
   await signIn(page);
   const title = `Playwright card ${Date.now()}`;
-  await page.route("**/api/chat", async (route) => {
-    const board = await (await page.request.get("/api/board")).json();
-    board.cards["card-chat"] = { id: "card-chat", title, details: "From the assistant." };
+  await page.route("**/api/boards/1/chat", async (route) => {
+    const board = await (await page.request.get(BOARD)).json();
+    board.cards["card-chat"] = { id: "card-chat", title, details: "From the assistant.", priority: null, dueDate: null, assignee: null, labels: [], comments: 0, checklist: { done: 0, total: 0 } };
     board.columns[0].cardIds.push("card-chat");
     const messages = [{ role: "user", content: "Add a card" }, { role: "assistant", content: "Added it." }];
     await route.fulfill({ json: { response: "Added it.", messages, board } });

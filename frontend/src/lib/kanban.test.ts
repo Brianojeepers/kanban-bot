@@ -1,5 +1,6 @@
 import type { Active, KeyboardCoordinateGetter, Over } from "@dnd-kit/core";
-import { applyMove, boardAnnouncements, columnKeyboardCoordinates, getMoveTarget, type Column } from "@/lib/kanban";
+import { applyMove, boardAnnouncements, columnKeyboardCoordinates, dueStatus, emptyFilter, isDueSoon, formatDueDate, getMoveTarget, isFiltering, localToday, labelColor, matchesFilter, parseLabels, timeAgo, UNASSIGNED, type Column } from "@/lib/kanban";
+import { makeCard } from "@/test/fixtures";
 
 describe("getMoveTarget", () => {
   const columns: Column[] = [
@@ -37,8 +38,13 @@ describe("getMoveTarget", () => {
 
 describe("boardAnnouncements", () => {
   const announcements = boardAnnouncements({
+    id: 1,
+    name: "Board",
+    owner: "user",
+    members: ["user"],
+    labels: [],
     columns: [{ id: "col-a", title: "Backlog", cardIds: ["card-1"] }, { id: "col-b", title: "Review", cardIds: ["card-2"] }],
-    cards: { "card-1": { id: "card-1", title: "Draft", details: "" }, "card-2": { id: "card-2", title: "Other", details: "" } },
+    cards: { "card-1": makeCard("card-1", "Draft"), "card-2": makeCard("card-2", "Other") },
   });
   const active = { id: "card-1" } as Active;
   const over = (id: string) => ({ id }) as Over;
@@ -110,6 +116,11 @@ describe("columnKeyboardCoordinates", () => {
 
 describe("applyMove", () => {
   const board = {
+    id: 1,
+    name: "Board",
+    owner: "user",
+    members: ["user"],
+    labels: [],
     columns: [{ id: "col-a", title: "A", cardIds: ["card-1", "card-2", "card-3"] }, { id: "col-b", title: "B", cardIds: ["card-4"] }],
     cards: {},
   };
@@ -121,5 +132,96 @@ describe("applyMove", () => {
   it("reorders within a column without changing the original board", () => {
     expect(applyMove(board, "card-1", "col-a", 2).columns[0].cardIds).toEqual(["card-2", "card-3", "card-1"]);
     expect(board.columns[0].cardIds).toEqual(["card-1", "card-2", "card-3"]);
+  });
+});
+
+describe("due dates", () => {
+  it("formats today's local date as the API does", () => {
+    expect(localToday(new Date(2026, 0, 5, 23, 30))).toBe("2026-01-05");
+  });
+
+  it("classifies a due date against today", () => {
+    expect(dueStatus("2026-03-01", "2026-03-02")).toBe("overdue");
+    expect(dueStatus("2026-03-02", "2026-03-02")).toBe("today");
+    expect(dueStatus("2026-03-05", "2026-03-02")).toBe("soon");
+    expect(dueStatus("2026-03-06", "2026-03-02")).toBe("upcoming");
+    expect(dueStatus("2026-03-02", "2026-02-27")).toBe("soon");
+    expect(isDueSoon("today")).toBe(true);
+    expect(isDueSoon("soon")).toBe(true);
+    expect(isDueSoon("overdue")).toBe(false);
+  });
+
+  it("shows a due date as a short month and day", () => {
+    expect(formatDueDate("2026-10-01")).toBe("Oct 1");
+  });
+});
+
+describe("matchesFilter", () => {
+  const card = makeCard("card-1", "Launch site", "Coordinate with Marketing", { priority: "high", dueDate: "2026-01-01" });
+
+  it("matches everything without a filter", () => {
+    expect(isFiltering(emptyFilter)).toBe(false);
+    expect(matchesFilter(makeCard("card-2", "Plain"), emptyFilter, "2026-06-01")).toBe(true);
+  });
+
+  it("searches titles and details, ignoring case and surrounding spaces", () => {
+    expect(matchesFilter(card, { ...emptyFilter, text: " LAUNCH " }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, text: "marketing" }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, text: "budget" }, "2026-06-01")).toBe(false);
+    expect(isFiltering({ ...emptyFilter, text: "   " })).toBe(false);
+  });
+
+  it("filters by assignee, including unassigned cards", () => {
+    expect(matchesFilter({ ...card, assignee: "ada" }, { ...emptyFilter, assignee: "ada" }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, assignee: "ada" }, "2026-06-01")).toBe(false);
+    expect(matchesFilter(card, { ...emptyFilter, assignee: UNASSIGNED }, "2026-06-01")).toBe(true);
+    expect(isFiltering({ ...emptyFilter, assignee: UNASSIGNED })).toBe(true);
+  });
+
+  it("filters by label, ignoring case", () => {
+    const labelled = { ...card, labels: ["Research", "q3"] };
+    expect(matchesFilter(labelled, { ...emptyFilter, label: "research" }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(labelled, { ...emptyFilter, label: "q4" }, "2026-06-01")).toBe(false);
+    expect(isFiltering({ ...emptyFilter, label: "q3" })).toBe(true);
+  });
+
+  it("filters by priority and by overdue due date", () => {
+    expect(matchesFilter(card, { ...emptyFilter, priority: "high" }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, priority: "low" }, "2026-06-01")).toBe(false);
+    expect(matchesFilter(card, { ...emptyFilter, due: "overdue" }, "2026-06-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, due: "overdue" }, "2025-12-01")).toBe(false);
+    expect(matchesFilter(makeCard("card-2", "No date"), { ...emptyFilter, due: "overdue" }, "2026-06-01")).toBe(false);
+    expect(matchesFilter(card, { ...emptyFilter, due: "soon" }, "2025-12-30")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, due: "soon" }, "2026-01-01")).toBe(true);
+    expect(matchesFilter(card, { ...emptyFilter, due: "soon" }, "2025-12-01")).toBe(false);
+    expect(matchesFilter(card, { ...emptyFilter, due: "soon" }, "2026-06-01")).toBe(false);
+    expect(matchesFilter(makeCard("card-2", "No date"), { ...emptyFilter, due: "soon" }, "2026-06-01")).toBe(false);
+  });
+});
+
+describe("timeAgo", () => {
+  const now = Date.parse("2026-09-27T12:00:00Z");
+  it.each([
+    ["2026-09-27T11:59:30Z", "just now"],
+    ["2026-09-27T12:00:05Z", "just now"],
+    ["2026-09-27T11:59:00Z", "1 minute ago"],
+    ["2026-09-27T11:15:00Z", "45 minutes ago"],
+    ["2026-09-27T10:00:00Z", "2 hours ago"],
+    ["2026-09-26T12:00:00Z", "1 day ago"],
+    ["2026-09-20T12:00:00Z", "7 days ago"],
+  ])("describes %s as %s", (timestamp, text) => {
+    expect(timeAgo(timestamp, now)).toBe(text);
+  });
+});
+
+describe("labels", () => {
+  it("parses comma-separated labels", () => {
+    expect(parseLabels(" ux, backend ,, q3 ")).toEqual(["ux", "backend", "q3"]);
+    expect(parseLabels("   ")).toEqual([]);
+  });
+
+  it("gives a label the same palette color whatever its case", () => {
+    expect(labelColor("Research")).toBe(labelColor("research"));
+    expect(new Set(["ux", "backend", "q3", "research", "design", "bug", "docs"].map(labelColor)).size).toBeGreaterThan(1);
   });
 });

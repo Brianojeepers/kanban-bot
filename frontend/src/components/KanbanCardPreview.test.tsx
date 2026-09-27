@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
+import { makeCard } from "@/test/fixtures";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 
 it("renders the active card content", () => {
   render(
     <KanbanCardPreview
-      card={{ id: "card-1", title: "Prepare release", details: "Confirm notes" }}
+      card={makeCard("card-1", "Prepare release", "Confirm notes")}
     />
   );
 

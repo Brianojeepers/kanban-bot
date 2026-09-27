@@ -38,3 +38,57 @@ body {
 .font-display {
   font-family: var(--font-display), "Segoe UI", sans-serif;
 }
+
+/* Tooltips: data-tooltip="What this does" on an icon button or badge shows the text below it on hover or
+   keyboard focus. data-tooltip-align="end" lines it up with the element's right edge, for elements near
+   the right of the screen or of a scrolling area. */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  z-index: 40;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 16rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--navy-dark);
+  color: #fff;
+  font-family: var(--font-body), "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  pointer-events: none;
+  /* Not rendered at rest: even an invisible tooltip near the screen edge would widen the page. */
+  display: none;
+}
+
+[data-tooltip-align="end"]::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  display: block;
+  animation: tooltip-in 120ms ease 250ms both;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

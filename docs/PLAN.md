@@ -1,15 +1,18 @@
-# Project Management MVP Plan
+# Project Management App Plan
+
+Parts 1 to 10 built the MVP. Parts 11 to 18 extended it into a multi-user project management app. Each part lists what was done; the MVP parts also list their tests and approval gates.
 
 ## Agreed Decisions
 
 - Run the combined application at `http://localhost:8000`.
 - Start scripts build the Docker image and start the application. Stop scripts stop the application without deleting data.
-- Persist SQLite in a Docker volume at `/data/pm.db`.
+- Persist SQLite in a Docker volume at `/data/pm.db`. Schema changes are numbered migrations applied on startup (`PRAGMA user_version`, currently 7); `docs/database-schema.json` documents the current schema.
 - Use SQLite for runtime data. Store the proposed schema and example records as JSON documentation in `docs/`, not as the application database.
-- Authenticate the fixed MVP account, `user` / `password`, with a signed, HTTP-only session cookie.
-- Keep exactly five columns in a fixed order; users and AI can rename them but cannot add, delete, or reorder them.
-- Cards have a title and details only.
-- Persist chat history in SQLite across browser and container restarts.
+- Users register with a username and password (scrypt-hashed) and sign in with a signed, HTTP-only session cookie. A demo account, `user` / `password`, is seeded into an empty database. (The MVP accepted only that fixed account; Part 11 replaced it.)
+- Each user has one or more boards and can share them with other users as members.
+- Keep exactly five columns in a fixed order on every board; users and AI can rename them but cannot add, delete, or reorder them.
+- Cards have a title and details, and optionally a priority, due date, assignee, labels and checklist; they can be commented on and archived. (The MVP had title and details only; Parts 12 to 17 added the rest.)
+- Persist each board's chat history in SQLite across browser and container restarts.
 - Apply validated AI mutations immediately, return a summary in chat, and refresh the board.
 - Keep `OPENROUTER_API_KEY` server-side in `.env` and Docker configuration. Use `openai/gpt-oss-120b` through OpenRouter.
 
@@ -156,8 +159,92 @@ Tests and success criteria:
 - Browser tests verify a mocked assistant response and board update without a manual reload.
 - Frontend and backend retain the shared coverage threshold.
 
-## Approval Gates
+## Approval Gates (MVP)
 
 1. Approve this plan and `frontend/AGENTS.md` before Part 2.
 2. Approve the documented database design before Part 6.
 3. Confirm a valid OpenRouter key is available before the opt-in live connectivity check in Part 8.
+
+## Part 11: Accounts and Multiple Boards
+
+- [x] Registration with scrypt-hashed passwords; usernames unique ignoring case; 5 registrations per hour per address.
+- [x] Sessions signed over a per-user session key; changing the password signs out other sessions.
+- [x] Change password and delete account (with its boards, cards and messages).
+- [x] Several boards per user: list, create, rename, delete (never the last one), with per-board chat history.
+- [x] Board, column, card and chat routes scoped under `/api/boards/{board_id}` and authorized per board.
+- [x] Migration from the version 1 database, tested from a version 0 file and run on the Docker volume.
+
+Tests and success criteria:
+
+- Users cannot read or change each other's boards; the AI can only change the board it is asked about.
+- Browser test covers the full account lifecycle and per-board data.
+
+## Part 12: Card Details and Filters
+
+- [x] Optional priority and due date on cards, editable in the UI and by the AI; edits are partial.
+- [x] Priority and due date badges; overdue cards highlighted and counted in the header.
+- [x] Search, priority and overdue filters on the board.
+- [x] Fix: long columns spilled their cards outside the column's droppable area, which broke keyboard and pointer moves from the bottom of a scrolled board.
+
+Tests: partial edits, validation of priority and dates, filters in unit tests, and a browser test that moves a card with the keyboard from the bottom of a long, scrolled column.
+
+## Part 13: Board Sharing
+
+- [x] Owners add members by username and remove them; members can leave. Shared boards are labelled with their owner.
+- [x] Members can change cards and columns and use the board's chat; renaming, sharing and deleting are owner-only (403).
+- [x] Card assignees (board members only), set in the UI or by the AI, with an assignee filter.
+- [x] Chat messages record their author; teammates' messages are labelled.
+- [x] Removing a member or deleting an account clears their assignments; migrations 3 and 4 run on the Docker volume.
+
+Tests: owner-only actions return 403, non-members get 404, assignees must be members, and a browser test shares a board with a second user who assigns a card and leaves.
+
+## Part 14: Comments and Activity
+
+- [x] Card comments for everyone who can open the board; authors can delete their own. Cards show a comment count.
+- [x] A per-board activity log of every change, including AI changes (marked "via assistant"), newest first, capped at 50 entries per request.
+- [x] Deleted accounts leave their comments and activity, shown as "Former member". Migration 5 run on the Docker volume.
+- [x] Fix: the board switcher overflowed phone screens once it had more buttons.
+
+Tests: only authors delete comments, the log's wording and order for every kind of change, and a browser test that comments and reads the activity.
+
+## Part 15: Card Labels
+
+- [x] Up to 5 labels per card, unique ignoring case, set in the card editor (comma-separated) or by the AI.
+- [x] Labels shown as colored badges (one stable color per label) and a label filter on the board.
+- [x] Migration 6 run on the Docker volume.
+
+Tests: case-insensitive de-duplication, limits, replacement on edit, AI labelling, and a browser test that labels and filters.
+
+## Part 16: My Work
+
+- [x] `GET /api/my-cards`: the user's assigned cards across boards, by urgency, with done cards last.
+- [x] "My work" dialog listing open assigned cards with board, column, priority and due date; choosing one opens its board, refreshing the board list when the board is new to it.
+- [x] Browser tests clean up their boards even when they fail.
+
+Tests: ordering across boards, removal on leaving a board, and a browser test that opens a board from My work.
+
+## Part 17: Checklists and Archive
+
+- [x] Card checklists: add, tick (optimistically, rolled back on failure), remove; progress shown on the card. Checklist and comments share one card dialog.
+- [x] Archive cards (hidden from the board, My work and board labels), restore them to the end of their column, or delete them for good.
+- [x] Checklist and archive changes appear in the activity log. Migration 7 run on the Docker volume.
+
+Tests: archived cards leave column positions contiguous and cannot be changed until restored, checklist counts, and a browser test that ticks a checklist, archives and restores.
+
+## Part 18: Feedback Fixes
+
+- [x] New cards (manual or AI) no longer vanish under an active filter: cards added after the filter last changed stay visible until it changes.
+- [x] Priority and due date can be set when adding a card, not only when editing. Cards due today or within 3 days are marked "due soon" and counted in the header; the "Overdue only" checkbox became a due date filter (overdue, or due soon).
+- [x] Every icon button and card badge explains itself in a tooltip on hover or keyboard focus, including why a disabled button is disabled.
+
+Tests: a browser test adds a card with a priority and due date under an active filter and checks a tooltip on hover; the phone layout test caught tooltips widening the page.
+
+## Known Limitations
+
+- Rate limits are in memory and reset when the app restarts. Registration allows 5 per hour per address, which the browser tests also use (one per run).
+- The browser tests keep a reusable `e2e-member` account in the Docker database.
+- Deleting a board, card or account removes related rows in application code; the foreign keys have no `ON DELETE CASCADE`.
+
+## Next
+
+Nothing is planned. Candidate ideas, not yet agreed: due date reminders, board templates, and customisable columns (which would change the fixed five-column contract used by the API and the AI).

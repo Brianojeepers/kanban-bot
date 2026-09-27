@@ -3,17 +3,19 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { PanelRightClose, SendHorizontal, Sparkles } from "lucide-react";
 import type { BoardData } from "@/lib/kanban";
+import { failureMessage, getMessages, sendChat, type ChatMessage } from "@/lib/api";
 
-type Message = { role: string; content: string };
-type ChatSidebarProps = { onBoardUpdated: (board: BoardData) => void; onClose?: () => void };
+type ChatSidebarProps = { boardId: number; username: string; onBoardUpdated: (board: BoardData) => void; onClose?: () => void };
 
-export const ChatSidebar = ({ onBoardUpdated, onClose }: ChatSidebarProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+const bubble = "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed";
+
+export const ChatSidebar = ({ boardId, username, onBoardUpdated, onClose }: ChatSidebarProps) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { fetch("/api/messages").then((response) => response.ok ? response.json() : []).catch(() => []).then((history: Message[]) => setMessages((current) => [...history, ...current])); }, []);
+  useEffect(() => { getMessages(boardId).catch(() => []).then((history) => setMessages((current) => [...history, ...current])); }, [boardId]);
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [messages, isSending]);
 
   const send = async (event: FormEvent<HTMLFormElement>) => {
@@ -23,23 +25,17 @@ export const ChatSidebar = ({ onBoardUpdated, onClose }: ChatSidebarProps) => {
     // Enter submits through requestSubmit, which ignores the disabled Send button.
     if (!message || isSending) return;
     const history = messages;
-    setMessages([...history, { role: "user", content: message }]);
+    setMessages([...history, { role: "user", content: message, author: username }]);
     setIsSending(true); setError("");
     formElement.reset();
-    let reason = "";
     try {
-      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
-      const result = await response.json();
-      if (!response.ok) {
-        if (typeof result.detail === "string") reason = result.detail;
-        throw new Error();
-      }
+      const result = await sendChat(boardId, message);
       setMessages(result.messages);
       onBoardUpdated(result.board);
-    } catch {
+    } catch (failure) {
       setMessages(history);
       (formElement.elements.namedItem("message") as HTMLTextAreaElement).value = message;
-      setError(reason || "Unable to send message.");
+      setError(failureMessage(failure, "Unable to send message."));
     }
     finally { setIsSending(false); }
   };
@@ -59,7 +55,7 @@ export const ChatSidebar = ({ onBoardUpdated, onClose }: ChatSidebarProps) => {
           <p className="text-xs text-[var(--gray-text)]">Creates, edits and moves cards for you</p>
         </div>
         {onClose && (
-          <button type="button" onClick={onClose} aria-label="Hide AI assistant" title="Hide" className="flex size-8 items-center justify-center rounded-lg text-[var(--gray-text)] transition hover:bg-[var(--surface)] hover:text-[var(--navy-dark)]">
+          <button type="button" onClick={onClose} aria-label="Hide AI assistant" data-tooltip="Hide the assistant to give the board more room" data-tooltip-align="end" className="flex size-8 items-center justify-center rounded-lg text-[var(--gray-text)] transition hover:bg-[var(--surface)] hover:text-[var(--navy-dark)]">
             <PanelRightClose className="size-4" aria-hidden />
           </button>
         )}
@@ -72,11 +68,29 @@ export const ChatSidebar = ({ onBoardUpdated, onClose }: ChatSidebarProps) => {
           </div>
         )}
         {messages.map((message, index) => {
-          const isUser = message.role === "user";
+          const key = `${message.role}-${index}`;
+          if (message.role !== "user") {
+            return (
+              <p key={key} className={`${bubble} self-start rounded-bl-md border border-[var(--stroke)] bg-white text-[var(--navy-dark)] shadow-[var(--shadow-soft)]`}>
+                <span className="sr-only">Assistant: </span>{message.content}
+              </p>
+            );
+          }
+          if (message.author === username) {
+            return (
+              <p key={key} className={`${bubble} self-end rounded-br-md bg-[var(--secondary-purple)] text-white`}>
+                <span className="sr-only">You: </span>{message.content}
+              </p>
+            );
+          }
+          // A teammate's message on a shared board.
           return (
-            <p key={`${message.role}-${index}`} className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${isUser ? "self-end rounded-br-md bg-[var(--secondary-purple)] text-white" : "self-start rounded-bl-md border border-[var(--stroke)] bg-white text-[var(--navy-dark)] shadow-[var(--shadow-soft)]"}`}>
-              <span className="sr-only">{isUser ? "You: " : "Assistant: "}</span>{message.content}
-            </p>
+            <div key={key} className="flex max-w-[85%] flex-col items-end gap-1 self-end">
+              <span className="px-1 text-[11px] font-semibold text-[var(--gray-text)]">{message.author ?? "Former member"}</span>
+              <p className={`${bubble} max-w-full rounded-br-md bg-[var(--secondary-purple)]/10 text-[var(--navy-dark)]`}>
+                <span className="sr-only">{message.author ?? "Former member"}: </span>{message.content}
+              </p>
+            </div>
           );
         })}
         {isSending && (
@@ -92,7 +106,7 @@ export const ChatSidebar = ({ onBoardUpdated, onClose }: ChatSidebarProps) => {
         {error && <p role="alert" className="mb-2 rounded-lg bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]">{error}</p>}
         <div className="flex items-end gap-2 rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] p-1.5 transition focus-within:border-[var(--primary-blue)] focus-within:bg-white focus-within:ring-4 focus-within:ring-[var(--primary-blue)]/10">
           <textarea name="message" required maxLength={2000} aria-label="Message" placeholder="Ask about your board" onKeyDown={sendOnEnter} rows={1} className="max-h-32 flex-1 resize-none bg-transparent px-2.5 py-1.5 text-sm text-[var(--navy-dark)] outline-none [field-sizing:content]" />
-          <button type="submit" disabled={isSending} aria-label="Send" title="Send" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--secondary-purple)] text-white transition hover:brightness-110 disabled:opacity-50">
+          <button type="submit" disabled={isSending} aria-label="Send" data-tooltip="Send (Enter)" data-tooltip-align="end" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--secondary-purple)] text-white transition hover:brightness-110 disabled:opacity-50">
             <SendHorizontal className="size-4" aria-hidden />
           </button>
         </div>

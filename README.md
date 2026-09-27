@@ -1,6 +1,6 @@
 # Kanban Studio
 
-A single-board Kanban app with an AI assistant that can create, edit, move and delete cards. FastAPI and SQLite on the backend, a statically exported Next.js frontend, packaged as one Docker image.
+A Kanban app with accounts, several boards per user, board sharing, card priorities, due dates, assignees, labels, checklists and comments, card archiving, an activity log, a "My work" list of your assigned cards, search and filters, and an AI assistant that can create, edit, move and delete cards. FastAPI and SQLite on the backend, a statically exported Next.js frontend, packaged as one Docker image.
 
 ## Run
 
@@ -11,7 +11,7 @@ OPENROUTER_API_KEY=<your OpenRouter key>
 SESSION_SECRET=<output of: python3 -c 'import secrets; print(secrets.token_hex(32))'>
 ```
 
-Then run `scripts/start.sh` (`scripts/start.ps1` on Windows) and open http://localhost:8000. Sign in as `user` / `password`. Stop with `scripts/stop.sh`; the data is kept in the `pm_pm_data` volume. To reset it, stop the app and run `docker volume rm pm_pm_data`.
+Then run `scripts/start.sh` (`scripts/start.ps1` on Windows) and open http://localhost:8000. Create an account, or sign in to the demo account as `user` / `password`. Stop with `scripts/stop.sh`; the data is kept in the `pm_pm_data` volume. To reset it, stop the app and run `docker volume rm pm_pm_data`.
 
 ## Test
 

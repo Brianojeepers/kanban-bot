@@ -1,9 +1,17 @@
 import type { Announcements, KeyboardCoordinateGetter } from "@dnd-kit/core";
 
+export type Priority = "low" | "medium" | "high";
+
 export type Card = {
   id: string;
   title: string;
   details: string;
+  priority: Priority | null;
+  dueDate: string | null;
+  assignee: string | null;
+  labels: string[];
+  comments: number;
+  checklist: { done: number; total: number };
 };
 
 export type Column = {
@@ -13,9 +21,18 @@ export type Column = {
 };
 
 export type BoardData = {
+  id: number;
+  name: string;
+  owner: string;
+  // Usernames of everyone who can open the board, the owner first.
+  members: string[];
+  // The distinct labels used on the board's cards.
+  labels: string[];
   columns: Column[];
   cards: Record<string, Card>;
 };
+
+export type BoardSummary = { id: number; name: string; owner: string };
 
 // Where a dragged card lands: over a column it goes to the end, over a card it takes that
 // card's index, so within a column it swaps into the slot the sortable preview shows.
@@ -90,3 +107,63 @@ export const columnKeyboardCoordinates: KeyboardCoordinateGetter = (event, { act
   }
   return undefined;
 };
+
+// Today as a local "YYYY-MM-DD" date, the format the API uses for due dates.
+export const localToday = (now = new Date()) =>
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+// A card is due soon when its due date is within this many days after today.
+export const DUE_SOON_DAYS = 3;
+
+export type DueStatus = "overdue" | "today" | "soon" | "upcoming";
+
+// "YYYY-MM-DD" strings compare correctly as text.
+export const dueStatus = (dueDate: string, today: string): DueStatus => {
+  const [year, month, day] = today.split("-").map(Number);
+  const soonLimit = localToday(new Date(year, month - 1, day + DUE_SOON_DAYS));
+  return dueDate < today ? "overdue" : dueDate === today ? "today" : dueDate <= soonLimit ? "soon" : "upcoming";
+};
+
+// Overdue, or due today or soon: the dates worth a warning.
+export const isDueSoon = (status: DueStatus) => status === "today" || status === "soon";
+
+export const formatDueDate = (dueDate: string) => {
+  const [year, month, day] = dueDate.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+// assignee is "" for anyone, UNASSIGNED for cards without one, or a username (never this short).
+export const UNASSIGNED = "-";
+export type CardFilter = { text: string; priority: Priority | ""; assignee: string; label: string; due: "" | "overdue" | "soon" };
+export const emptyFilter: CardFilter = { text: "", priority: "", assignee: "", label: "", due: "" };
+
+export const isFiltering = (filter: CardFilter) => Boolean(filter.text.trim() || filter.priority || filter.assignee || filter.label || filter.due);
+
+export const matchesFilter = (card: Card, filter: CardFilter, today: string) => {
+  const text = filter.text.trim().toLowerCase();
+  return (!text || `${card.title}\n${card.details}`.toLowerCase().includes(text))
+    && (!filter.priority || card.priority === filter.priority)
+    && (!filter.assignee || (card.assignee ?? UNASSIGNED) === filter.assignee)
+    && (!filter.label || card.labels.some((label) => label.toLowerCase() === filter.label.toLowerCase()))
+    && (!filter.due || (card.dueDate !== null && (filter.due === "overdue" ? dueStatus(card.dueDate, today) === "overdue" : isDueSoon(dueStatus(card.dueDate, today)))));
+};
+
+// How long ago an API timestamp ("2026-09-27T12:00:00Z") was, in the largest whole unit.
+export const timeAgo = (timestamp: string, now = Date.now()) => {
+  const seconds = Math.max(0, Math.floor((now - Date.parse(timestamp)) / 1000));
+  for (const [unit, size] of [["day", 86400], ["hour", 3600], ["minute", 60]] as const) {
+    const count = Math.floor(seconds / size);
+    if (count >= 1) return `${count} ${unit}${count > 1 ? "s" : ""} ago`;
+  }
+  return "just now";
+};
+
+// Each label keeps one palette color wherever it appears, whatever its case.
+const labelColors = ["var(--primary-blue)", "var(--secondary-purple)", "#b07f00", "var(--navy-dark)", "#2f855a", "#c05621"];
+export const labelColor = (label: string) => {
+  const hash = [...label.toLowerCase()].reduce((total, character) => (total * 31 + character.charCodeAt(0)) >>> 0, 0);
+  return labelColors[hash % labelColors.length];
+};
+
+// Labels as typed in the card editor: comma-separated, trimmed, blanks dropped.
+export const parseLabels = (text: string) => text.split(",").map((label) => label.trim()).filter(Boolean);

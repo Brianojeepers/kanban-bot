@@ -2,36 +2,64 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthGate } from "@/components/AuthGate";
 
-vi.mock("@/components/KanbanBoard", () => ({ KanbanBoard: ({ onLogout }: { onLogout: () => void }) => <button onClick={onLogout}>Log out</button> }));
-vi.mock("@/components/ChatSidebar", () => ({ ChatSidebar: ({ onClose }: { onClose: () => void }) => <aside><h2>AI assistant</h2><button onClick={onClose}>Hide AI assistant</button></aside> }));
+vi.mock("@/components/Workspace", () => ({
+  Workspace: ({ username, onSignedOut }: { username: string; onSignedOut: () => void }) => <button onClick={onSignedOut}>Signed in as {username}</button>,
+}));
+
+const reply = (status: number, body: unknown = {}) => ({ ok: status < 400, status, json: () => Promise.resolve(body) });
+
+const fillIn = async (username: string, password: string) => {
+  await userEvent.type(await screen.findByLabelText("Username"), username);
+  await userEvent.type(screen.getByLabelText("Password"), password);
+};
 
 describe("AuthGate", () => {
-  it("shows a login error for rejected credentials", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: false }));
+  it("opens the workspace for an existing session", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(200, { username: "ada" })));
     render(<AuthGate />);
-    await screen.findByLabelText("Username");
-    await userEvent.type(screen.getByLabelText("Username"), "user");
-    await userEvent.type(screen.getByLabelText("Password"), "wrong");
+    expect(await screen.findByRole("button", { name: "Signed in as ada" })).toBeVisible();
+  });
+
+  it("shows a login error for rejected credentials", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(reply(401, { detail: "Invalid username or password" })));
+    render(<AuthGate />);
+    await fillIn("user", "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Invalid username or password.");
   });
 
-  it("renders the board after a valid login", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) }));
+  it("signs in and returns to the form after signing out", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(reply(200, { username: "user" })));
     render(<AuthGate />);
-    await screen.findByLabelText("Username");
-    await userEvent.type(screen.getByLabelText("Username"), "user");
-    await userEvent.type(screen.getByLabelText("Password"), "password");
+    await fillIn("user", "password");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findByRole("button", { name: "Log out" })).toBeVisible();
+    expect(fetch).toHaveBeenLastCalledWith("/api/login", expect.objectContaining({ body: JSON.stringify({ username: "user", password: "password" }) }));
+    await userEvent.click(await screen.findByRole("button", { name: "Signed in as user" }));
+    expect(await screen.findByLabelText("Username")).toBeVisible();
   });
 
-  it("returns to the sign-in form after logging out", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true }).mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }));
+  it("creates an account", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(reply(200, { username: "ada" })));
     render(<AuthGate />);
-    await userEvent.click(await screen.findByRole("button", { name: "Log out" }));
-    expect(await screen.findByLabelText("Username")).toBeVisible();
-    expect(fetch).toHaveBeenCalledWith("/api/logout", { method: "POST" });
+    await userEvent.click(await screen.findByRole("button", { name: "Create an account" }));
+    await fillIn("ada", "long password");
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(fetch).toHaveBeenLastCalledWith("/api/register", expect.objectContaining({ body: JSON.stringify({ username: "ada", password: "long password" }) }));
+    expect(await screen.findByRole("button", { name: "Signed in as ada" })).toBeVisible();
+  });
+
+  it("shows why an account could not be created, and clears it when switching back", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(reply(409, { detail: "That username is taken" })).mockResolvedValueOnce(reply(422, { detail: [] })));
+    render(<AuthGate />);
+    await userEvent.click(await screen.findByRole("button", { name: "Create an account" }));
+    await fillIn("ada", "long password");
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That username is taken");
+    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Use 3 to 32 letters");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toHaveAttribute("type", "submit");
   });
 
   it("shows the sign-in form with a message when the server cannot be reached", async () => {
@@ -42,22 +70,10 @@ describe("AuthGate", () => {
   });
 
   it("shows the wait time when there have been too many sign-in attempts", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false, status: 429, json: () => Promise.resolve({ detail: "Too many requests. Try again in 42 seconds." }) }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(401)).mockResolvedValueOnce(reply(429, { detail: "Too many requests. Try again in 42 seconds." })));
     render(<AuthGate />);
-    await userEvent.type(await screen.findByLabelText("Username"), "user");
-    await userEvent.type(screen.getByLabelText("Password"), "wrong");
+    await fillIn("user", "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests. Try again in 42 seconds.");
-  });
-
-  it("hides the assistant to give the board the full width, and brings it back", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    render(<AuthGate />);
-    await userEvent.click(await screen.findByRole("button", { name: "Hide AI assistant" }));
-    expect(screen.getByRole("heading", { name: "AI assistant", hidden: true })).not.toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Open AI assistant" }));
-    expect(screen.getByRole("heading", { name: "AI assistant" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Open AI assistant" })).not.toBeInTheDocument();
   });
 });
