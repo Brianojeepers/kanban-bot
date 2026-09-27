@@ -26,14 +26,15 @@ class CreateCard(BaseModel):
     action: Literal["create_card"]
     column_id: str
     title: board.Title
-    details: str = ""
+    details: board.Details = ""
 
 
 class EditCard(BaseModel):
     action: Literal["edit_card"]
     card_id: str
     title: board.Title
-    details: str = ""
+    # Required: an edit that left it out would erase the card's details.
+    details: board.Details
 
 
 class MoveCard(BaseModel):

@@ -19,7 +19,8 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
     event.preventDefault();
     const formElement = event.currentTarget;
     const message = String(new FormData(formElement).get("message") ?? "").trim();
-    if (!message) return;
+    // Enter submits through requestSubmit, which ignores the disabled Send button.
+    if (!message || isSending) return;
     const history = messages;
     setMessages([...history, { role: "user", content: message }]);
     setIsSending(true); setError("");
@@ -64,7 +65,7 @@ export const ChatSidebar = ({ onBoardUpdated }: ChatSidebarProps) => {
       <form onSubmit={send} className="border-t border-[var(--stroke)] p-3">
         {error && <p role="alert" className="mb-2 text-sm text-red-600">{error}</p>}
         <div className="flex items-end gap-2">
-          <textarea name="message" required aria-label="Message" placeholder="Ask about your board" onKeyDown={sendOnEnter} rows={1} className="max-h-32 flex-1 resize-none rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2 text-sm outline-none focus:border-[var(--primary-blue)]" />
+          <textarea name="message" required maxLength={2000} aria-label="Message" placeholder="Ask about your board" onKeyDown={sendOnEnter} rows={1} className="max-h-32 flex-1 resize-none rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-4 py-2 text-sm outline-none focus:border-[var(--primary-blue)]" />
           <button type="submit" disabled={isSending} className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Send</button>
         </div>
       </form>

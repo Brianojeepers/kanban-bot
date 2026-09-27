@@ -101,6 +101,33 @@ test("moves a card from Backlog to Discovery and back without duplication", asyn
   await expect(discovery).not.toContainText(title);
 });
 
+test("moves a card down one place within its column", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const stamp = Date.now();
+  const [first, second] = [`Drag card ${stamp}`, `Drag card ${stamp + 1}`];
+  const backlog = page.getByTestId("column-col-backlog");
+  for (const title of [first, second]) {
+    await backlog.getByRole("button", { name: /add a card/i }).click();
+    await backlog.getByPlaceholder("Card title").fill(title);
+    await backlog.getByRole("button", { name: /add card/i }).click();
+    await expect(backlog).toContainText(title);
+  }
+
+  const handleBox = await backlog.getByRole("button", { name: `Move ${first}` }).boundingBox();
+  const targetBox = await backlog.locator('[data-testid^="card-"]').filter({ hasText: second }).boundingBox();
+  if (!handleBox || !targetBox) throw new Error("Unable to resolve drag coordinates.");
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 20 });
+  await page.mouse.up();
+
+  const titles = backlog.locator('[data-testid^="card-"] h4');
+  await expect(titles.filter({ hasText: /^Drag card/ })).toHaveText([second, first]);
+  await page.reload();
+  await expect(titles.filter({ hasText: /^Drag card/ })).toHaveText([second, first]);
+});
+
 test("moves a card to another column with the keyboard", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
@@ -132,6 +159,25 @@ test("rejects a wrong password", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("Invalid username or password.")).toBeVisible();
   await expect(page.getByTestId("column-col-backlog")).toHaveCount(0);
+});
+
+test("logs out and keeps the board protected", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  expect((await page.request.get("/api/board")).status()).toBe(401);
+});
+
+test("fits a phone screen without sideways scrolling", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto("/");
+  await signIn(page);
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+  await expect(page.getByRole("heading", { name: "AI assistant" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(0);
 });
 
 test("edits and deletes a card", async ({ page }) => {

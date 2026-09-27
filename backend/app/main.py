@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from app.auth import COOKIE_NAME, PASSWORD, USERNAME, create_session, session_username
 from app import board
@@ -36,7 +36,7 @@ class ColumnRequest(BaseModel):
 
 class CardRequest(BaseModel):
     title: board.Title
-    details: str = ""
+    details: board.Details = ""
 
 
 class MoveRequest(BaseModel):
@@ -45,7 +45,7 @@ class MoveRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 def require_session(pm_session: str | None = Cookie(default=None)) -> str:

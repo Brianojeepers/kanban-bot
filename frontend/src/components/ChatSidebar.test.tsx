@@ -50,6 +50,18 @@ describe("ChatSidebar", () => {
     expect(fetchMock).toHaveBeenLastCalledWith("/api/chat", expect.objectContaining({ body: JSON.stringify({ message: "Line one\nLine two" }) }));
   });
 
+  it("does not send again on Enter while a reply is pending", async () => {
+    const fetchMock = vi.fn((path: string) => path === "/api/messages"
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+      : new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ChatSidebar onBoardUpdated={vi.fn()} />);
+    const input = await screen.findByPlaceholderText("Ask about your board");
+    await userEvent.type(input, "First{Enter}");
+    await userEvent.type(input, "Second{Enter}");
+    expect(fetchMock.mock.calls.filter(([path]) => path === "/api/chat")).toHaveLength(1);
+  });
+
   it("shows the server's reason when the AI reply is rejected", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
       .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ detail: "The AI returned an invalid reply. Please try again." }) }));

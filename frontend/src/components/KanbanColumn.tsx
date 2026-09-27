@@ -61,6 +61,7 @@ export const KanbanColumn = ({
             onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
+            maxLength={200}
           />
         </div>
       </div>

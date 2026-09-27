@@ -18,7 +18,8 @@ describe("getMoveTarget", () => {
   });
 
   it("reorders within a column", () => {
-    expect(getMoveTarget(columns, "card-1", "card-3")).toEqual({ columnId: "col-a", position: 1 });
+    expect(getMoveTarget(columns, "card-1", "card-2")).toEqual({ columnId: "col-a", position: 1 });
+    expect(getMoveTarget(columns, "card-1", "card-3")).toEqual({ columnId: "col-a", position: 2 });
     expect(getMoveTarget(columns, "card-3", "card-1")).toEqual({ columnId: "col-a", position: 0 });
     expect(getMoveTarget(columns, "card-1", "col-a")).toEqual({ columnId: "col-a", position: 2 });
   });

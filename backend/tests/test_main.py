@@ -118,6 +118,19 @@ def test_board_mutations_persist() -> None:
     assert card_id not in board["cards"]
 
 
+def test_oversized_or_blank_input_is_rejected_before_it_is_stored() -> None:
+    board_client = signed_in_client()
+    before = board_client.get("/api/board").json()
+
+    assert board_client.patch("/api/columns/col-backlog", json={"title": "x" * 201}).status_code == 422
+    assert board_client.post("/api/columns/col-backlog/cards", json={"title": "x" * 201}).status_code == 422
+    assert board_client.post("/api/columns/col-backlog/cards", json={"title": "Note", "details": "x" * 2001}).status_code == 422
+    assert board_client.patch("/api/cards/card-1", json={"title": "Note", "details": "x" * 2001}).status_code == 422
+    assert board_client.post("/api/chat", json={"message": "   "}).status_code == 422
+    assert board_client.post("/api/chat", json={"message": "x" * 2001}).status_code == 422
+    assert board_client.get("/api/board").json() == before
+
+
 def test_empty_card_details_use_the_default_text() -> None:
     board_client = signed_in_client()
     column_id = board_client.get("/api/board").json()["columns"][0]["id"]
@@ -286,6 +299,8 @@ MALFORMED_AI_REPLIES = {
     "unknown action": {"response": "ok", "operations": [{"action": "archive_card", "card_id": "card-1"}]},
     "made-up card id after create": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done", "title": "Temp"}, {"action": "delete_card", "card_id": "card-temp-1"}]},
     "blank title": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done", "title": "  "}]},
+    "edit without details": {"response": "ok", "operations": [{"action": "edit_card", "card_id": "card-1", "title": "Renamed"}]},
+    "overlong title": {"response": "ok", "operations": [{"action": "create_card", "column_id": "col-done", "title": "x" * 201}]},
 }
 
 

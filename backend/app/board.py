@@ -21,7 +21,8 @@ DEFAULT_CARDS = [
     ("card-8", "col-done", "Close onboarding sprint", "Document release notes and share internally."),
 ]
 
-Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Details = Annotated[str, StringConstraints(max_length=2000)]
 
 
 class NotFoundError(ValueError):

@@ -31,7 +31,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
       )}
       data-testid={`card-${card.id}`}
     >
-      {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
+      {isEditing ? <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); onEdit(card.id, String(form.get("title")), String(form.get("details"))); setIsEditing(false); }} className="space-y-2"><input name="title" defaultValue={card.title} aria-label="Card title" maxLength={200} className="w-full border p-1 text-sm" required /><textarea name="details" defaultValue={card.details} aria-label="Card details" maxLength={2000} className="w-full border p-1 text-sm" rows={2} /><button type="submit" className="text-xs text-[var(--primary-blue)]">Save</button></form> : <><h4 className="break-words font-display text-base font-semibold text-[var(--navy-dark)]">
         {card.title}
       </h4>
       <p className="mt-2 break-words text-sm leading-6 text-[var(--gray-text)]">
