@@ -118,19 +118,15 @@ def owned_board(board_id: int, user: SignedInUser) -> int:
 OwnedBoard = Annotated[int, Depends(owned_board)]
 
 
-@app.exception_handler(NotFoundError)
-def not_found(_request: Request, error: NotFoundError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(error)})
+def _error_handler(status_code: int):
+    def handler(_request: Request, error: Exception) -> JSONResponse:
+        return JSONResponse(status_code=status_code, content={"detail": str(error)})
+    return handler
 
 
-@app.exception_handler(ForbiddenError)
-def forbidden(_request: Request, error: ForbiddenError) -> JSONResponse:
-    return JSONResponse(status_code=403, content={"detail": str(error)})
-
-
-@app.exception_handler(ConflictError)
-def conflict(_request: Request, error: ConflictError) -> JSONResponse:
-    return JSONResponse(status_code=409, content={"detail": str(error)})
+app.exception_handler(NotFoundError)(_error_handler(404))
+app.exception_handler(ForbiddenError)(_error_handler(403))
+app.exception_handler(ConflictError)(_error_handler(409))
 
 
 def set_session(response: Response, token: str) -> None:
@@ -357,6 +353,7 @@ def add_card_comment(user: SignedInUser, board_id: OwnedBoard, card_id: str, pay
 def delete_card_comment(user: SignedInUser, board_id: OwnedBoard, card_id: str, comment_id: int) -> dict:
     with connection() as database:
         board.delete_comment(database, board_id, card_id, user.id, comment_id)
+        board.record(database, board_id, user.id, "deleted a comment")
     return {"comments": board.comments(board_id, card_id), "board": board.board(board_id)}
 
 
@@ -374,7 +371,6 @@ def get_messages(board_id: OwnedBoard) -> list[dict]:
 def send_chat(user: SignedInUser, board_id: OwnedBoard, payload: ChatRequest) -> dict:
     for limiter in (chat_limiter, daily_chat_limiter):
         limiter.check(user.username)
-    for limiter in (chat_limiter, daily_chat_limiter):
         limiter.record(user.username)
     try:
         return chat.ask(board_id, user.id, payload.message)

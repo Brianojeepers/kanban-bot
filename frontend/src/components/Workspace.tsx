@@ -11,11 +11,11 @@ import { ChatSidebar } from "@/components/ChatSidebar";
 import { ShareDialog } from "@/components/ShareDialog";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { createBoard, failureMessage, deleteBoard, listBoards, logout, renameBoard } from "@/lib/api";
+import { headerButton } from "@/lib/styles";
 import type { BoardData, BoardSummary } from "@/lib/kanban";
 
 type WorkspaceProps = { username: string; onSignedOut: () => void };
-
-const headerButton = "flex items-center gap-2 rounded-full border border-[var(--stroke)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] hover:text-[var(--primary-blue)]";
+type ModalType = "account" | "share" | "activity" | "mywork" | "archive" | null;
 
 export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
   const [boards, setBoards] = useState<BoardSummary[] | null>(null);
@@ -23,11 +23,7 @@ export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [error, setError] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(true);
-  const [isAccountOpen, setIsAccountOpen] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isActivityOpen, setIsActivityOpen] = useState(false);
-  const [isMyWorkOpen, setIsMyWorkOpen] = useState(false);
-  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  const [openModal, setOpenModal] = useState<ModalType>(null);
   // Replies can arrive after the user has switched boards; only the open board's data is shown.
   const openBoardId = useRef<number | null>(null);
 
@@ -77,7 +73,7 @@ export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
 
   // My work can point to a board shared with the user after the list loaded, so refresh the list for it.
   const openFromMyWork = (id: number) => run(async () => {
-    setIsMyWorkOpen(false);
+    setOpenModal(null);
     if (!boards!.some((summary) => summary.id === id)) setBoards(await listBoards());
     if (id !== boardId) selectBoard(id);
   }, "Unable to open that board.");
@@ -85,7 +81,7 @@ export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
   const handleLeft = () => {
     const remaining = boards!.filter((summary) => summary.id !== boardId);
     setBoards(remaining);
-    setIsShareOpen(false);
+    setOpenModal(null);
     selectBoard(remaining[0].id);
   };
 
@@ -115,14 +111,14 @@ export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
             username={username}
             board={board}
             onBoardChange={showBoard}
-            toolbar={<BoardSwitcher boards={boards} activeId={boardId} username={username} onShare={() => setIsShareOpen(true)} onShowActivity={() => setIsActivityOpen(true)} onShowArchive={() => setIsArchiveOpen(true)} onSelect={selectBoard} onCreate={handleCreate} onRename={handleRename} onDelete={handleDelete} />}
+            toolbar={<BoardSwitcher boards={boards} activeId={boardId} username={username} onShare={() => setOpenModal("share")} onShowActivity={() => setOpenModal("activity")} onShowArchive={() => setOpenModal("archive")} onSelect={selectBoard} onCreate={handleCreate} onRename={handleRename} onDelete={handleDelete} />}
             actions={
               <>
-                <button type="button" onClick={() => setIsMyWorkOpen(true)} className={headerButton}>
+                <button type="button" onClick={() => setOpenModal("mywork")} className={headerButton}>
                   <ListTodo className="size-3.5" aria-hidden />
                   My work
                 </button>
-                <button type="button" onClick={() => setIsAccountOpen(true)} aria-label="Account settings" className={headerButton}>
+                <button type="button" onClick={() => setOpenModal("account")} aria-label="Account settings" className={headerButton}>
                   <UserRound className="size-3.5" aria-hidden />
                   <span className="max-w-32 truncate">{username}</span>
                 </button>
@@ -149,11 +145,11 @@ export const Workspace = ({ username, onSignedOut }: WorkspaceProps) => {
           Open AI assistant
         </button>
       )}
-      {isShareOpen && board && <ShareDialog board={board} username={username} onBoardChange={showBoard} onLeft={handleLeft} onClose={() => setIsShareOpen(false)} />}
-      {isActivityOpen && <ActivityDialog boardId={boardId} boardName={boards.find((summary) => summary.id === boardId)!.name} onClose={() => setIsActivityOpen(false)} />}
-      {isArchiveOpen && <ArchiveDialog boardId={boardId} boardName={boards.find((summary) => summary.id === boardId)!.name} onBoardChange={showBoard} onClose={() => setIsArchiveOpen(false)} />}
-      {isMyWorkOpen && <MyWorkDialog username={username} onOpenBoard={openFromMyWork} onClose={() => setIsMyWorkOpen(false)} />}
-      {isAccountOpen && <AccountDialog username={username} onClose={() => setIsAccountOpen(false)} onDeleted={onSignedOut} />}
+      {openModal === "share" && board && <ShareDialog board={board} username={username} onBoardChange={showBoard} onLeft={handleLeft} onClose={() => setOpenModal(null)} />}
+      {openModal === "activity" && <ActivityDialog boardId={boardId} boardName={boards.find((summary) => summary.id === boardId)!.name} onClose={() => setOpenModal(null)} />}
+      {openModal === "archive" && <ArchiveDialog boardId={boardId} boardName={boards.find((summary) => summary.id === boardId)!.name} onBoardChange={showBoard} onClose={() => setOpenModal(null)} />}
+      {openModal === "mywork" && <MyWorkDialog username={username} onOpenBoard={openFromMyWork} onClose={() => setOpenModal(null)} />}
+      {openModal === "account" && <AccountDialog username={username} onClose={() => setOpenModal(null)} onDeleted={onSignedOut} />}
     </div>
   );
 };

@@ -15,6 +15,7 @@ Priority = Literal["low", "medium", "high"]
 Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=30)]
 Labels = Annotated[list[Label], Field(max_length=5)]
 CARD_FIELDS = ("title", "details", "priority", "due_date", "assignee_id")
+ISO8601_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def boards(user_id: int) -> list[dict]:

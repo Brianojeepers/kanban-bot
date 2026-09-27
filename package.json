@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "agent-browser": "^0.38.1"
+  },
+  "allowScripts": {
+    "agent-browser@0.38.1": true
+  }
+}
