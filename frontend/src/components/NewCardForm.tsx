@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Plus } from "lucide-react";
 
 const initialFormState = { title: "", details: "" };
 
@@ -21,9 +22,9 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
   };
 
   return (
-    <div className="mt-4">
+    <div className="mt-2">
       {isOpen ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-2 rounded-xl border border-[var(--stroke)] bg-white p-2 shadow-[var(--shadow-soft)]">
           <input
             value={formState.title}
             onChange={(event) =>
@@ -31,7 +32,8 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
             }
             placeholder="Card title"
             maxLength={200}
-            className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+            autoFocus
+            className="w-full rounded-lg border border-[var(--stroke)] bg-[var(--surface)] px-2.5 py-1.5 text-sm font-semibold text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)] focus:bg-white"
             required
           />
           <textarea
@@ -41,13 +43,13 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
             }
             placeholder="Details"
             maxLength={2000}
-            rows={3}
-            className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
+            rows={2}
+            className="w-full resize-y rounded-lg border border-[var(--stroke)] bg-[var(--surface)] px-2.5 py-1.5 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)] focus:bg-white"
           />
           <div className="flex items-center gap-2">
             <button
               type="submit"
-              className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
+              className="rounded-lg bg-[var(--secondary-purple)] px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110"
             >
               Add card
             </button>
@@ -57,7 +59,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
                 setIsOpen(false);
                 setFormState(initialFormState);
               }}
-              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-[var(--gray-text)] transition hover:bg-[var(--surface)] hover:text-[var(--navy-dark)]"
             >
               Cancel
             </button>
@@ -67,8 +69,9 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
+          className="flex w-full items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-[var(--gray-text)] transition hover:bg-white hover:text-[var(--primary-blue)] hover:shadow-[var(--shadow-soft)]"
         >
+          <Plus className="size-4" aria-hidden />
           Add a card
         </button>
       )}

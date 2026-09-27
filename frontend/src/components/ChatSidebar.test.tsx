@@ -85,4 +85,12 @@ describe("ChatSidebar", () => {
     render(<ChatSidebar onBoardUpdated={vi.fn()} />);
     expect(await screen.findByText(/Ask the assistant/)).toBeVisible();
   });
+
+  it("offers a button to hide the sidebar", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }));
+    const onClose = vi.fn();
+    render(<ChatSidebar onBoardUpdated={vi.fn()} onClose={onClose} />);
+    await userEvent.click(screen.getByRole("button", { name: "Hide AI assistant" }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { AuthGate } from "@/components/AuthGate";
 
 vi.mock("@/components/KanbanBoard", () => ({ KanbanBoard: ({ onLogout }: { onLogout: () => void }) => <button onClick={onLogout}>Log out</button> }));
+vi.mock("@/components/ChatSidebar", () => ({ ChatSidebar: ({ onClose }: { onClose: () => void }) => <aside><h2>AI assistant</h2><button onClick={onClose}>Hide AI assistant</button></aside> }));
 
 describe("AuthGate", () => {
   it("shows a login error for rejected credentials", async () => {
@@ -48,5 +49,15 @@ describe("AuthGate", () => {
     await userEvent.type(screen.getByLabelText("Password"), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests. Try again in 42 seconds.");
+  });
+
+  it("hides the assistant to give the board the full width, and brings it back", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    render(<AuthGate />);
+    await userEvent.click(await screen.findByRole("button", { name: "Hide AI assistant" }));
+    expect(screen.getByRole("heading", { name: "AI assistant", hidden: true })).not.toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Open AI assistant" }));
+    expect(screen.getByRole("heading", { name: "AI assistant" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Open AI assistant" })).not.toBeInTheDocument();
   });
 });

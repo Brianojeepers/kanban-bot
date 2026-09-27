@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import { Inbox } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
@@ -8,6 +9,7 @@ import { NewCardForm } from "@/components/NewCardForm";
 
 type KanbanColumnProps = {
   column: Column;
+  accent: string;
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
@@ -17,6 +19,7 @@ type KanbanColumnProps = {
 
 export const KanbanColumn = ({
   column,
+  accent,
   cards,
   onRename,
   onAddCard,
@@ -41,31 +44,28 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
-        isOver && "ring-2 ring-[var(--accent-yellow)]"
+        "flex min-h-[28rem] flex-col rounded-2xl border border-[var(--stroke)] bg-[var(--navy-dark)]/[0.03] p-2 transition",
+        isOver && "bg-[var(--accent-yellow)]/10 ring-2 ring-[var(--accent-yellow)]"
       )}
+      style={{ borderTopColor: accent, borderTopWidth: 3 }}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
-            </span>
-          </div>
-          <input
-            value={draftTitle}
-            onChange={(event) => setDraftTitle(event.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
-            maxLength={200}
-          />
-        </div>
+      <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+        <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: accent }} aria-hidden />
+        <input
+          value={draftTitle}
+          onChange={(event) => setDraftTitle(event.target.value)}
+          onBlur={saveTitle}
+          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+          className="min-w-0 flex-1 rounded-md bg-transparent px-1.5 py-1 font-display text-base font-semibold text-[var(--navy-dark)] outline-none transition hover:bg-white focus:bg-white focus:ring-2 focus:ring-[var(--primary-blue)]/40"
+          aria-label="Column title"
+          maxLength={200}
+        />
+        <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--gray-text)] shadow-[var(--shadow-soft)]">
+          <span className="sr-only">Cards: </span>{cards.length}
+        </span>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div className="flex flex-1 flex-col gap-2">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
@@ -77,7 +77,8 @@ export const KanbanColumn = ({
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--navy-dark)]/10 px-3 py-8 text-center text-xs font-medium text-[var(--gray-text)]">
+            <Inbox className="size-5 opacity-60" aria-hidden />
             Drop a card here
           </div>
         )}

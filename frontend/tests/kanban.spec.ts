@@ -44,8 +44,9 @@ test("moves a card between columns", async ({ page }) => {
   await sourceColumn.getByRole("button", { name: /add card/i }).click();
   const card = sourceColumn.locator('[data-testid^="card-"]').filter({ hasText: title });
   const targetColumn = page.getByTestId("column-col-review");
-  await card.scrollIntoViewIfNeeded();
+  // The board scrolls sideways when the columns do not fit; bring the card in last so its handle stays on screen.
   await targetColumn.scrollIntoViewIfNeeded();
+  await card.scrollIntoViewIfNeeded();
   const cardBox = await card.getByRole("button", { name: `Move ${title}` }).boundingBox();
   const columnBox = await targetColumn.boundingBox();
   if (!cardBox || !columnBox) {
@@ -178,6 +179,18 @@ test("fits a phone screen without sideways scrolling", async ({ page }) => {
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
   await expect(page.getByRole("heading", { name: "AI assistant" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBe(0);
+});
+
+test("hides the assistant so the board uses the full width", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const board = page.locator("main > section");
+  const narrow = (await board.boundingBox())!.width;
+  await page.getByRole("button", { name: "Hide AI assistant" }).click();
+  await expect(page.getByRole("heading", { name: "AI assistant" })).toBeHidden();
+  expect((await board.boundingBox())!.width).toBeGreaterThan(narrow);
+  await page.getByRole("button", { name: "Open AI assistant" }).click();
+  await expect(page.getByRole("heading", { name: "AI assistant" })).toBeVisible();
 });
 
 test("edits and deletes a card", async ({ page }) => {
